@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {identity,suggested,variation,rowSchema,emptyTerms} from '../src/lib/domain';
+import {parseText,parseCsv} from '../src/lib/import';
+import {passwordMatches,validToken,sessionToken} from '../src/lib/auth';
+import {scryptSync} from 'node:crypto';
+test('recargo sobre costo, fijo y logística; sin política no inventa cotización',()=>{assert.equal(suggested(400,0,'percent',15),460);assert.equal(suggested(400,0,'fixed',75),475);assert.equal(suggested(400,10,'percent',15),471.5);assert.equal(suggested(400,null,null,null),null);assert.equal(suggested(0.1,0.2,'fixed',0),0.3)});
+test('variación conserva signo y ausencia de historial',()=>{assert.deepEqual(variation(400,500),{amount:-100,percent:-20});assert.equal(variation(400,null),null)});
+test('identidad normaliza espacios pero conserva variantes',()=>{assert.equal(identity({brand:' Apple ',model:'iPhone   13',variant:'128 GB'}),identity({brand:'apple',model:'IPHONE 13',variant:'128 GB'}));assert.notEqual(identity({brand:'Apple',model:'iPhone 13',variant:'128 GB'}),identity({brand:'Apple',model:'iPhone 13',variant:'256 GB'}))});
+test('texto no infiere moneda desde símbolo dólar',()=>{const [r]=parseText('Apple iPhone 13 $400','Proveedor A');assert.equal(r.cost,400);assert.equal(r.currency,'');assert.equal(r.reviewed,false);assert.equal(r.terms.availability,'unknown')});
+test('canónico y CSV preservan proveedores y condiciones desconocidas',()=>{const r=parseText('Apple | iPhone 13 | 128 GB | 400 | USD','A')[0];assert.equal(r.currency,'USD');const csv=parseCsv('marca,modelo,variante,costo,moneda,proveedor\nApple,iPhone 13,128 GB,390,USD,B\nApple,iPhone 13,128 GB,400,USD,A','C');assert.equal(csv.length,2);assert.equal(csv[0].supplier,'B');assert.equal(csv[1].terms.logistics,null)});
+test('publicación requiere revisión humana y costo positivo',()=>{const r={brand:'Apple',model:'iPhone 13',variant:'128',supplier:'A',cost:400,currency:'USD',terms:emptyTerms(),reviewed:true};assert.equal(rowSchema.safeParse(r).success,true);assert.equal(rowSchema.safeParse({...r,reviewed:false}).success,false);assert.equal(rowSchema.safeParse({...r,cost:-1}).success,false);assert.equal(rowSchema.safeParse({...r,currency:''}).success,false)});
+test('autenticación rechaza hash incorrecto, token alterado y secreto ausente',()=>{process.env.AUTH_SECRET='a'.repeat(64);const hash='salt:'+scryptSync('sample-password','salt',64).toString('hex');assert(passwordMatches('sample-password',hash));assert(!passwordMatches('wrong-password',hash));const token=sessionToken();assert(validToken(token));assert(!validToken(token+'x'));delete process.env.AUTH_SECRET;assert(!validToken(token))});

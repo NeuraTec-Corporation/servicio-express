@@ -1,0 +1,3 @@
+import {authenticated} from '@/lib/auth';
+import {db,TENANT} from '@/lib/db';
+export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){if(!await authenticated())return new Response(null,{status:401});const {id}=await params;if(!/^[\da-f-]{36}$/i.test(id))return new Response(null,{status:404});const [s]=await db()`SELECT original,filename FROM sources WHERE id=${id} AND tenant_id=${TENANT}`;if(!s)return new Response(null,{status:404});return new Response(s.original,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(s.filename)}`,'Cache-Control':'no-store'}})}

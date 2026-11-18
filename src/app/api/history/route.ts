@@ -1,0 +1,4 @@
+import {NextResponse} from 'next/server';
+import {authenticated} from '@/lib/auth';
+import {db,TENANT} from '@/lib/db';
+export async function GET(request:Request){if(!await authenticated())return new Response(null,{status:401});const id=new URL(request.url).searchParams.get('variant');if(!id||!/^[\da-f-]{36}$/i.test(id))return new Response(null,{status:400});const sql=db();const [offers,audit]=await Promise.all([sql`SELECT o.id,o.supplier,o.cost,o.currency,o.published_at,o.superseded_at,o.source_id FROM offers o WHERE tenant_id=${TENANT} AND variant_id=${id} ORDER BY published_at DESC LIMIT 100`,sql`SELECT action,detail,created_at FROM audit_events WHERE tenant_id=${TENANT} AND (entity_id=${id} OR entity_id IN (SELECT id::text FROM offers WHERE tenant_id=${TENANT} AND variant_id=${id})) ORDER BY created_at DESC LIMIT 100`]);return NextResponse.json({offers,audit})}
