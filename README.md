@@ -13,6 +13,20 @@ MVP privado de consulta y cotización de ofertas mayoristas. Código público po
 
 Recargo porcentual sobre costo + logística conocida, o suma fija en la moneda de la oferta. No hay conversión monetaria. Impuestos y cargos desconocidos no se inventan. Sin recargo configurado no se presenta precio de venta. Una lista no acredita stock ni compra.
 
+## Dashboard gerencial
+
+La pestaña superior separa **Compras, ventas y servicios reales** de **Ofertas de proveedores**. Filtros: año, mes, marca, modelo, parte, pieza, técnico, oficina, proveedor, moneda, operación y categoría. Los valores provienen de registros disponibles; no se fabrican técnicos, sucursales ni movimientos. Para ver totales con varias monedas hay que elegir una.
+
+Usar **Registrar operación** para anotar una compra, venta, reparación/servicio o gasto efectivamente realizado: fecha, categoría, cantidad, moneda e importe unitario; contexto de modelo, técnico, oficina y, opcionalmente, parte, pieza, variante y proveedor. El costo desconocido se deja vacío, no en cero. La utilidad bruta se calcula solo para ventas/servicios con costo conocido; las compras de inventario se muestran aparte y no se descuentan una segunda vez como costo de venta. No es un cálculo de utilidad neta contable ni inventario autoritativo.
+
+Gráficos: evolución mensual, comparación de costos/ingresos, distribución por categoría, desglose por modelo/parte/pieza/técnico/oficina/proveedor, servicios por técnico y mapa mensual de oficinas. Los períodos sin actividad se incluyen con cero en la serie. La vista de proveedores presenta costos ofertados e historial, nunca ventas reales. Exportación CSV conserva filtros, moneda y procedencia. Edición y eliminación de registros manuales tienen auditoría; los históricos de compras/ventas existentes se consultan sin editarlos desde esta vista.
+
+`db/002_management.sql` es una migración versionada. Puede aplicarse con `npm run db:migrate`; el piloto también la aplica una sola vez bajo bloqueo transaccional al primer acceso autenticado al dashboard o a la limpieza. Vercel incluye explícitamente el SQL en el paquete. Los reportes del piloto están limitados a 10.000 registros por dominio; si se supera el límite, se muestra error y no se presentan totales parciales. Antes de ampliar el volumen se requiere agregación de servidor y paginación de origen.
+
+## Limpiar datos
+
+**Limpiar datos** permite borrar solo catálogo (ofertas históricas/actuales, fuentes originales y variantes no referenciadas) o todo el laboratorio, incluido el registro gerencial y compras/ventas históricas. Muestra el alcance antes de actuar y exige escribir `BORRAR` y confirmar la clave. Es irreversible desde la aplicación; exportar antes lo necesario. No se ejecuta automáticamente al instalar. La limpieza es transaccional y exclusiva del tenant del piloto; conserva acceso, migraciones, auditoría y límites de intentos. La auditoría de modificaciones puede conservar valores anteriores. La eliminación individual también requiere clave y confirmación.
+
 ## Desarrollo
 
 Node 22 o 24, npm. `npm ci`, copiar `.env.example` a `.env.local`, configurar variables privadas, `npm run db:migrate`, `npm run dev`. `npm run check`, `npm test`, `npm run build`.
