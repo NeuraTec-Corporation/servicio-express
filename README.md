@@ -50,3 +50,9 @@ La URL de la aplicación incluye `noindex` y robots restrictivo; el acceso real 
 ## Selección y ficha del catálogo
 
 Al pulsar el modelo, un proveedor o una zona no editable de su fila se abre una ficha modal con cotización, condiciones, fuente e historial. El modelo y la oferta elegidos quedan destacados en morado con una marca visible. Se eliminó el panel lateral que quedaba centrado fuera de la vista en catálogos largos. Cerrar, Escape o pulsar fuera de la ficha vuelve al mismo lugar del catálogo. Los controles de recargo mantienen su comportamiento sin abrir la ficha.
+
+## Recargos individuales y masivos
+
+Las casillas marcan ofertas/modelos para recargo masivo y no abren la ficha. El nombre abre el detalle. Seleccionar un modelo marca sus ofertas visibles; se puede marcar cada proveedor individualmente o seleccionar todos los visibles. Las ofertas marcadas fuera de los filtros permanecen incluidas y el contador muestra la selección completa. Aplicar a seleccionados muestra vista previa y actualiza todas las ofertas indicadas en una transacción con auditoría; no hay cambios parciales. Los importes fijos requieren una sola moneda y los porcentajes conservan cada moneda.
+
+El editor se comparte entre tabla y ficha: el precio cambia al escribir y se identifica como vista previa hasta guardar. Enter, Tab/salir del campo o Guardar persisten el cambio. Se muestra Guardando, Guardado o el error con opción de reintentar; se impiden solicitudes duplicadas por Enter/blur. No se copia una cotización con cambios pendientes o inválidos. El predeterminado del modelo respeta recargos individuales; Heredar modelo quita la excepción de la oferta.
