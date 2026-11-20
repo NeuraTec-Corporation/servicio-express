@@ -10,6 +10,13 @@ export function validateFile(file:Pick<File,'name'|'size'>){
 }
 export type ReadResult={text:string;method:'pdf-text'|'ocr'|'pdf-mixed';pages:number;confidence:number|null};
 export async function readDocument(file:File,onProgress:(message:string)=>void,signal:AbortSignal):Promise<ReadResult>{
+ let rejectAbort:()=>void=()=>{};
+ const cancelled=new Promise<never>((_,reject)=>{rejectAbort=()=>reject(new DOMException('Lectura cancelada','AbortError'));});
+ signal.addEventListener('abort',rejectAbort,{once:true});
+ try{if(signal.aborted)throw new DOMException('Lectura cancelada','AbortError');return await Promise.race([readDocumentWork(file,message=>{if(!signal.aborted)onProgress(message);},signal),cancelled]);}
+ finally{signal.removeEventListener('abort',rejectAbort);}
+}
+async function readDocumentWork(file:File,onProgress:(message:string)=>void,signal:AbortSignal):Promise<ReadResult>{
  validateFile(file);
  let worker:import('tesseract.js').Worker|undefined;
  let task:import('pdfjs-dist').PDFDocumentLoadingTask|undefined;
