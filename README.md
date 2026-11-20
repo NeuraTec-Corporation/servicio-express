@@ -46,3 +46,7 @@ Importación TXT/CSV/XLSX, PDF digital o escaneado y capturas PNG/JPG/WEBP. Arra
 Respaldos: ejecutar exportación `pg_dump` en un entorno autorizado y probar restauración en base aislada antes de uso real. No se presume que el historial de Neon sustituye respaldos exportables. Establecer política de retención de fuentes y borradores según límites de almacenamiento antes de operación continua.
 
 La URL de la aplicación incluye `noindex` y robots restrictivo; el acceso real lo controla autenticación. El repositorio público puede ser indexado y clonado.
+
+## Selección y ficha del catálogo
+
+Al pulsar el modelo, un proveedor o una zona no editable de su fila se abre una ficha modal con cotización, condiciones, fuente e historial. El modelo y la oferta elegidos quedan destacados en morado con una marca visible. Se eliminó el panel lateral que quedaba centrado fuera de la vista en catálogos largos. Cerrar, Escape o pulsar fuera de la ficha vuelve al mismo lugar del catálogo. Los controles de recargo mantienen su comportamiento sin abrir la ficha.
