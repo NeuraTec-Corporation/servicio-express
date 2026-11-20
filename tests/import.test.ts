@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parseText,parseAmount} from '../src/lib/import';
+import {parseText,parseAmount,parseCsv} from '../src/lib/import';
 import {validateFile,readDocument} from '../src/lib/document-reader';
 test('captura WhatsApp: encabezados, marcas inferidas, capacidad y precio separado',()=>{
  const rows=parseText('Proveedor Demo\nPrecios en USD\niPhone 14 128 GB negro $480\nSamsung Galaxy S24 256 GB USD 520\nRedmi Note 13 8/256 GB $180\nGracias por su compra','QA');
@@ -28,4 +28,5 @@ test('cancelación previa devuelve control sin iniciar lectores ni red',async()=
 });
 test('normaliza la confusión OCR de iPhone y rechaza CSV truncado',()=>{
  assert.equal(parseText('Apple ¡Phone 14 128 GB USD 480','QA')[0].model,'iPhone 14');
+ assert.throws(()=>parseCsv('marca,modelo,costo,moneda\n'+Array(501).fill('Apple,iPhone 14,480,USD').join('\n'),'QA'),/500/);
 });

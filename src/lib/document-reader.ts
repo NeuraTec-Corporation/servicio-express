@@ -74,6 +74,6 @@ async function readDocumentWork(file:File,onProgress:(message:string)=>void,sign
   }
   if(!texts.join('').trim())throw new Error('El PDF no contiene texto legible. Prueba con una copia sin contraseña y páginas nítidas.');
   return {text:texts.join('\n\n'),method:ocrPages?'pdf-mixed':'pdf-text',pages:documentPdf.numPages,confidence:scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null};
- }catch(error){if(signal.aborted)throw new DOMException('Lectura cancelada','AbortError');if(error instanceof Error&&/password|Password|destroyed/i.test(error.message))throw new Error('El PDF está protegido o no pudo abrirse. Sube una copia sin contraseña.');throw error;}
+ }catch(error){if(signal.aborted)throw new DOMException('Lectura cancelada','AbortError');if(error instanceof Error&&/Invalid PDF|InvalidPDF|MissingPDF|UnexpectedResponse/i.test(error.name+' '+error.message))throw new Error('El PDF está dañado o incompleto. Descárgalo nuevamente y vuelve a cargarlo.');if(error instanceof Error&&/could not be decoded|InvalidStateError/i.test(error.name+' '+error.message))throw new Error('La imagen no se pudo abrir. Guarda la captura como PNG o JPG y vuelve a cargarla.');if(error instanceof Error&&/password|Password|destroyed/i.test(error.message))throw new Error('El PDF está protegido o no pudo abrirse. Sube una copia sin contraseña.');throw error;}
  finally{signal.removeEventListener('abort',abort);await worker?.terminate().catch(()=>{});await task?.destroy().catch(()=>{});}
 }
