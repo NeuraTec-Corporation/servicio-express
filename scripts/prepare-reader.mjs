@@ -1,0 +1,15 @@
+import {cp, mkdir, readdir, copyFile} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {dirname, join} from 'node:path';
+const require=createRequire(import.meta.url);
+const root=name=>dirname(require.resolve(name+'/package.json'));
+await mkdir('public/reader/core',{recursive:true});
+await mkdir('public/reader/lang',{recursive:true});
+await cp(join(root('tesseract.js'),'dist/worker.min.js'),'public/reader/worker.min.js');
+const core=root('tesseract.js-core');
+for(const name of await readdir(core))if(/\.wasm(?:\.js)?$/.test(name)&&name.includes('lstm'))await copyFile(join(core,name),join('public/reader/core',name));
+for(const lang of ['eng','spa'])await copyFile(join(root('@tesseract.js-data/'+lang),'4.0.0_best_int',lang+'.traineddata.gz'),join('public/reader/lang',lang+'.traineddata.gz'));
+const pdf=root('pdfjs-dist');
+await copyFile(join(pdf,'build/pdf.worker.min.mjs'),'public/reader/pdf.worker.min.mjs');
+for(const folder of ['cmaps','standard_fonts','wasm'])await cp(join(pdf,folder),join('public/reader',folder),{recursive:true});
+console.log('Lectores PDF/OCR preparados en el propio sitio.');
