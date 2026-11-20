@@ -53,7 +53,7 @@ export async function readDocument(file:File,onProgress:(message:string)=>void,s
    if(line)lines.push(line);
    let text=lines.join('\n');
    // A digital header over a scanned price list must not suppress OCR.
-   const hasImages=content.items.length<8||(await page.getOperatorList()).fnArray.some(op=>op===pdf.OPS.paintImageXObject||op===pdf.OPS.paintInlineImageXObject);
+   const hasImages=(await page.getOperatorList()).fnArray.some(op=>op===pdf.OPS.paintImageXObject||op===pdf.OPS.paintInlineImageXObject);
    if(text.replace(/\s/g,'').length<30||hasImages){
     onProgress(`Leyendo página escaneada ${n} de ${documentPdf.numPages}…`);
     const base=page.getViewport({scale:1});const scale=Math.min(2.2,2600/base.width,Math.sqrt(8_000_000/(base.width*base.height)));
