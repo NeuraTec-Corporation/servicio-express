@@ -60,3 +60,9 @@ El editor se comparte entre tabla y ficha: el precio cambia al escribir y se ide
 ## Entrada y fuentes del dashboard
 
 El dashboard abre Catálogo y recargos cuando existen listas publicadas. Muestra el número de ofertas vigentes y operaciones recibidas de la base; cada vista tiene sus filtros. Catálogo habilita año/mes de publicación, marca, modelo, proveedor y moneda; muestra seis gráficos, costos y precios sugeridos con los recargos guardados, tabla de ofertas y CSV con recargo/precio. Cambiar marca reinicia modelo/proveedor y acota sus opciones. Las operaciones reales siguen separadas: si no existen, se explica por qué y se ofrecen acciones para consultar catálogo o registrar la primera operación. No se fabrican compras/ventas desde ofertas.
+
+## Gráficos y documentación gobernada
+
+Dashboard con Apache ECharts6.1 modular, carga diferida y SVG. Barras con ejes/valores, series temporales con leyendas, distribución con total correcto y colores únicos, actividad por oficinas, tablas accesibles, selección Top5/Top8/Todos y descarga SVG. El histórico de un solo mes se muestra como un período disponible, sin inventar una tendencia. Tarjetas de altura adaptable y disposición por columnas evitan grandes espacios vacíos. Tooltips richText evitan interpretar etiquetas como HTML.
+
+Raíz canónica en Notion: Servicio Express — Governed Project, página41a839ef-3602-8175-b471-e7c436ba77b6, bajo04 — Governed Projects & Client Solutions. Mantiene documentos de gobierno/prioridad, estado, riesgos, decisiones/evidencia histórica, arquitectura/contratos, operación y mandato original. El traslado conserva la identidad y los registros previos.
