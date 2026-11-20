@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import type {Candidate} from '@/lib/domain';
 import {validateFile} from '@/lib/document-reader';
 
@@ -9,7 +9,8 @@ export default function ImportUpload({supplier,setSupplier,onPrepared}:{supplier
  const controller=useRef<AbortController|null>(null),input=useRef<HTMLInputElement>(null),active=useRef(false);
  useEffect(()=>()=>{controller.current?.abort();},[]);
  useEffect(()=>{if(!file?.type.startsWith('image/')){setPreview('');return;}const url=URL.createObjectURL(file);setPreview(url);return()=>URL.revokeObjectURL(url);},[file]);
- function selectFile(files:File[]){if(busy)return;setError('');if(files.length!==1){setError('Carga un archivo por vez para mantener cada lista vinculada a su proveedor.');return;}try{validateFile(files[0]);setFile(files[0]);}catch(e){setError(e instanceof Error?e.message:'No se pudo abrir el archivo.');}}
+ const selectFile=useCallback((files:File[])=>{if(busy)return;setError('');if(files.length!==1){setError('Carga un archivo por vez para mantener cada lista vinculada a su proveedor.');return;}try{validateFile(files[0]);setFile(files[0]);}catch(e){setError(e instanceof Error?e.message:'No se pudo abrir el archivo.');}},[busy]);
+ useEffect(()=>{const paste=(e:ClipboardEvent)=>{const images=Array.from(e.clipboardData?.items??[]).filter(item=>item.kind==='file'&&item.type.startsWith('image/')).map(item=>item.getAsFile()).filter((f):f is File=>!!f);if(images.length){e.preventDefault();selectFile(images);}};document.addEventListener('paste',paste);return()=>document.removeEventListener('paste',paste);},[selectFile]);
  async function prepare(){
   if(active.current)return;active.current=true;setBusy(true);setError('');setProgress('Preparando lista…');const aborter=new AbortController();controller.current=aborter;
   const timeout=setTimeout(()=>aborter.abort(),180000);
@@ -30,7 +31,7 @@ export default function ImportUpload({supplier,setSupplier,onPrepared}:{supplier
   }catch(e){setError(aborter.signal.aborted?'Lectura cancelada o tiempo agotado. Puedes reintentar con un archivo más pequeño.':e instanceof Error?e.message:'No se pudo leer el documento.');}
   finally{clearTimeout(timeout);active.current=false;setBusy(false);controller.current=null;setProgress('');}
  }
- return <form className="import-upload" onSubmit={e=>{e.preventDefault();void prepare();}} onPaste={e=>{const images=Array.from(e.clipboardData.items).filter(item=>item.kind==='file'&&item.type.startsWith('image/')).map(item=>item.getAsFile()).filter((f):f is File=>!!f);if(images.length){e.preventDefault();selectFile(images);}}}>
+ return <form className="import-upload" onSubmit={e=>{e.preventDefault();void prepare();}}>
   <label>Proveedor<input name="supplier" value={supplier} onChange={e=>setSupplier(e.target.value)} required maxLength={150} placeholder="Nombre del proveedor" disabled={busy}/></label>
   <section aria-label="Cargar documento o captura" className={`document-drop${dragging?' dragging':''}`} onDragOver={e=>{e.preventDefault();if(!busy)setDragging(true);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDragging(false);}} onDrop={e=>{e.preventDefault();setDragging(false);selectFile(Array.from(e.dataTransfer.files));}}>
    <span className="drop-symbol" aria-hidden="true">↥</span><h2>Arrastra tu PDF o captura aquí</h2><p>También puedes pegar una captura de WhatsApp con <kbd>Ctrl</kbd> + <kbd>V</kbd>.</p>

@@ -22,3 +22,17 @@ Sin POS, automatización WhatsApp, datos reales, dominios ni contratación de pl
 
 Meridian, con cinco columnas por variante. El nombre del proveedor selecciona el detalle del panel derecho, centrado verticalmente; copiar cotización está en ese panel. La tabla se adapta a filas de dos columnas en móvil para evitar desplazamiento horizontal. Fuentes e historial permanecen accesibles.
 
+
+## Dashboard gerencial y limpieza — 2026-11-18
+
+Completados y desplegados: pestaña gerencial, 12 filtros, seis gráficos, registro/edición de operaciones y exportación CSV. Ofertas separadas de operación real; sin sumar monedas distintas ni inventar costos desconocidos.
+
+Limpieza por catálogo o laboratorio completo con clave y confirmación BORRAR. No se ejecutó la limpieza global. Se retiraron únicamente tres operaciones temporales de QA; quedaron cero operaciones y se conservaron las dos ofertas originales.
+
+Verificación: TypeScript y 18/18 pruebas; persistencia API, filtros, CSV, gráficos y móvil sin desbordamiento. Despliegue READY dpl_B8Cnv6FhTfXxWL7xfhNv73tRKyzw. PR 2 fusionado, commit f28e79e1701d0c10d2da6aa8e4aa8ec483b78ae2. Documentación Notion actualizada.
+
+## Lectura de documentos — 2026-11-20
+
+Implementados: PDF digital y escaneado, OCR de capturas PNG/JPG/WEBP en navegador, arrastrar/soltar, pegar imagen con Ctrl+V, vista previa, progreso, cancelar y texto extraído editable. Motores e idiomas en el propio sitio, sin API OCR de pago.
+
+TypeScript y 26 pruebas pasan. Captura, PDF digital y PDF escaneado produjeron tres candidatos con importes 480/520/180 USD; el PDF digital usa extracción de texto directa. API CSV/XLSX conserva originales byte por byte. No se publicaron ofertas QA: las dos originales permanecen. Los borradores QA identificados como ficticios se conservaron como evidencia de carga. Se verificó bloqueo de publicación sin revisión y rechazo de fuentes sin productos o imágenes sin extracción. PDF de 21 páginas rechazado sin carga parcial. La cancelación devuelve el control inmediatamente. Límites visibles: 4 MB, 20 páginas, 100.000 caracteres y 500 productos.
