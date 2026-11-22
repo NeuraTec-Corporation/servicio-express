@@ -13,7 +13,7 @@ export async function GET(request:Request){
  if(!await authenticated())return new Response(null,{status:401});
  try{
   await ensureWorkshopSchema();const sql=db();const id=new URL(request.url).searchParams.get('orderId');
-  if(!id){const batches=await sql`SELECT id,part,brand,model,office,supplier,invoice,unit_cost::float8,currency,ordered_quantity,received_quantity,on_hand,reserved,version,created_at::text FROM stock_batches WHERE tenant_id=${TENANT} ORDER BY created_at DESC LIMIT 2001`;if(batches.length>2000)throw new Invalid('Se requiere paginar el inventario antes de ampliar el reporte.',422);return NextResponse.json({batches})}
+  if(!id){const batches=await sql`SELECT id,part,brand,model,office,supplier,invoice,cancelled,unit_cost::float8,currency,ordered_quantity,received_quantity,on_hand,reserved,version,created_at::text FROM stock_batches WHERE tenant_id=${TENANT} ORDER BY created_at DESC LIMIT 2001`;if(batches.length>2000)throw new Invalid('Se requiere paginar el inventario antes de ampliar el reporte.',422);return NextResponse.json({batches})}
   if(!z.uuid().safeParse(id).success)throw new Invalid('Orden inválida');
   if(!(await sql`SELECT id FROM work_orders WHERE tenant_id=${TENANT} AND id=${id}`).length)throw new Invalid('Orden no encontrada',404);
   const [quotes,parts,events,media]=await Promise.all([
@@ -40,6 +40,7 @@ export async function POST(request:Request){
    }else if(input.action==='receive'||input.action==='transfer'||input.action==='supplier_return'){
     const [batch]=await sql`SELECT * FROM stock_batches WHERE tenant_id=${TENANT} AND id=${input.batch_id} FOR UPDATE`;
     if(!batch)throw new Invalid('Lote no encontrado',404);
+    if(batch.cancelled)throw new Invalid('El pedido fue cancelado.');
     if(batch.version!==input.batch_version)throw new Invalid('El lote cambió. Actualiza antes de recibir.',409);
     if(input.action==='receive'){
     if(batch.received_quantity+input.quantity>batch.ordered_quantity)throw new Invalid('La recepción supera la cantidad pedida. Registra otro lote si corresponde.');
@@ -98,6 +99,7 @@ export async function POST(request:Request){
      const batchId=input.action==='reserve'?input.batch_id:allocation!.batch_id;
      const [batch]=await sql`SELECT * FROM stock_batches WHERE tenant_id=${TENANT} AND id=${batchId} FOR UPDATE`;
      if(!batch)throw new Invalid('Lote no encontrado',404);
+    if(batch.cancelled)throw new Invalid('El pedido fue cancelado.');
      const quantity=input.action==='reserve'?input.quantity:allocation!.quantity;
      if(input.action!=='return'){
       if(['pending','declined'].includes(next.approval_state)||latest&&latest.status!=='approved')throw new Invalid('Falta la aprobación vigente del trabajo antes de reservar o consumir.');
@@ -152,6 +154,7 @@ export async function DELETE(request:Request){
     await sql`DELETE FROM work_order_media WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_events WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`UPDATE stock_movements SET order_id=NULL WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_orders WHERE tenant_id=${TENANT} AND id=${input.id}`;
    }else{
     const [batch]=await sql`SELECT * FROM stock_batches WHERE tenant_id=${TENANT} AND id=${input.id} FOR UPDATE`;if(!batch)throw new Invalid('Lote no encontrado',404);
+    if(batch.cancelled)throw new Invalid('El pedido fue cancelado.');
     if((await sql`SELECT id FROM work_order_parts WHERE tenant_id=${TENANT} AND batch_id=${input.id}`).length)throw new Invalid('El lote está vinculado con órdenes; conserva su trazabilidad.');
     const movements=await sql`SELECT * FROM stock_movements WHERE tenant_id=${TENANT} AND batch_id=${input.id}`;
     await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},'operador','stock_delete',${input.id},${sql.json({batch,movements})})`;
