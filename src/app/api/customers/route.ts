@@ -1,0 +1,4 @@
+import {currentUser} from '@/lib/auth';
+import {canManage,orderVisible,phoneKey} from '@/lib/access';
+import {db,TENANT} from '@/lib/db';
+export async function GET(request:Request){const u=await currentUser();if(!u||u.must_change)return new Response(null,{status:401});const key=phoneKey(new URL(request.url).searchParams.get('phone')??'');if(!/^[0-9]{7,15}$/.test(key))return Response.json({customer:null});const [c]=await db()`SELECT id,name,display_phone FROM customers WHERE tenant_id=${TENANT} AND phone_key=${key}`;if(!c)return Response.json({customer:null});if(!canManage(u.role)){const orders=await db()`SELECT data FROM work_orders WHERE tenant_id=${TENANT} AND customer_id=${c.id}`;if(!orders.some(o=>orderVisible(u,o.data)))return Response.json({customer:null})}return Response.json({customer:{name:c.name,phone:c.display_phone}})}

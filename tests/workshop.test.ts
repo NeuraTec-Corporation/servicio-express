@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {blankOrder,orderInput,publicOrder,validateOrder,workshopCounts,type WorkOrder} from '../src/lib/workshop';
-const fields=()=>({...blankOrder(),pos_reference:'POS-123',brand:'Apple',model:'iPhone 14',reported_fault:'No enciende',technician:'Técnico 1',office:'Central'});
+const fields=()=>({...blankOrder(),pos_reference:'POS-123',brand:'Apple',model:'iPhone 14',customer_name:'Cliente prueba',customer_phone:'15551234567',reported_fault:'No enciende',technician:'Técnico 1',office:'Central'});
 const order=(overrides:Partial<WorkOrder>={}):WorkOrder=>({...fields(),id:'00000000-0000-4000-8000-000000000001',public_code:'SE-123',version:1,created_at:'2026-11-21T10:00:00Z',updated_at:'2026-11-21T10:00:00Z',...overrides});
 test('TV allowlist never discloses client, POS, diagnosis, evidence or unexpected stored keys',()=>{
   const privateOrder={...order(),customer_name:'Private person',customer_phone:'555',pos_reference:'SECRET-POS',diagnosis:'Private finding',approval_evidence:'Private authorization',device_password:'SECRET'};
@@ -12,10 +12,10 @@ test('TV allowlist never discloses client, POS, diagnosis, evidence or unexpecte
 test('waiting counts overlap without adding duplicate active devices, delivered excluded',()=>{
   assert.deepEqual(workshopCounts([publicOrder(order({parts_state:'ordered',approval_state:'pending'})),publicOrder(order({stage:'delivered'}))]),{active:1,waitingParts:1,waitingApproval:1,ready:0});
 });
-test('new orders start received, validation rejects blank POS and invalid estimate',()=>{
+test('new orders start received, phone required and external reference optional and invalid estimate',()=>{
   assert.equal(validateOrder(fields()),null);
   assert.ok(validateOrder({...fields(),stage:'ready',tests_passed:true,diagnosis:'done'}));
-  assert.equal(orderInput.safeParse({action:'create',data:{...fields(),pos_reference:' '}}).success,false);
+  assert.equal(orderInput.safeParse({action:'create',data:{...fields(),pos_reference:' '}}).success,true);
   assert.equal(orderInput.safeParse({action:'create',data:{...fields(),estimated_minutes:-1}}).success,false);
 });
 test('repair progression requires diagnosis, parts and authorization',()=>{

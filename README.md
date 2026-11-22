@@ -89,8 +89,13 @@ El botón Respaldo descarga un archivo `.sebackup` completo del negocio, origina
 
 La comprobación de recuperación reconstruye registros en tablas temporales con las restricciones del esquema y verifica sus referencias, sin modificar las tablas de negocio. Recuperar definitivamente requiere RESTAURAR, clave de acceso, clave de respaldo y una instancia sin datos de negocio. No borra ni sobrescribe la base existente. Identificadores de eventos de auditoría/cronología pueden reasignarse; se conserva la referencia original de auditoría en el detalle restaurado. Archivos de hasta 128 MB cifrados, carga en fragmentos de 2 MB, JSON descomprimido acotado a 256 MB y hasta 100.000 registros. Requiere la misma versión de migraciones; volúmenes superiores o cambios de versión necesitan procedimiento de base de datos. Fragmentos cifrados son temporales y se retiran tras comprobar/recuperar; cargas abandonadas caducan y se limpian al siguiente uso.
 
-No hay copias externas programadas ni retención destructiva automática. El respaldo externo automático requiere definir destino/custodia y verificar costos antes de activarlo; una copia en la misma base no se presenta como protección contra pérdida de esa base.
+El destino externo aprobado es Google Drive corporativo. Agente Windows y tarea preparados; activación pendiente del instalador por restricciones del host. Copia local y confirmación remota de IT son estados distintos. El borrado requiere comprobante externo vigente para la revisión actual. No hay retención destructiva automática. Véase ACCESO-Y-RESPALDOS.md.
 
 Inventario incorpora mínimos/objetivo por referencia exacta y oficina; sugiere cantidad considerando disponibles y pedidos por llegar. No envía compras. Pedidos sin recepción pueden corregirse o cancelarse con auditoría y versión; lo recibido conserva costo e historial. TV rota páginas de ocho equipos cada 20 segundos, sin consultas adicionales por rotación. Filtros del taller tienen etiquetas accesibles explícitas.
 
 Se retiraron las CLI de Vercel/Neon de las dependencias de desarrollo de la aplicación: despliegue y administración usan los conectores, sin incluir herramientas operativas innecesarias. Verify se ejecuta una vez por PR, sin duplicar por push de rama/main. La entrega utiliza una sola comprobación final enfocada en la nueva recuperación, sin repetir los 22 recorridos de taller ya verificados.
+
+
+## Cuentas y búsqueda por teléfono
+
+Migración 006: cuentas nominativas IT/dueños/manager/técnicos/staff, permisos de servidor, asignación por oficina, cliente por teléfono y borrado condicionado a copia externa. Sin integración POS. La referencia externa es opcional. Las claves iniciales son privadas; no se publica ninguna en el repositorio. Guía operativa: [ACCESO-Y-RESPALDOS.md](ACCESO-Y-RESPALDOS.md).

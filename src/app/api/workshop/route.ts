@@ -1,9 +1,10 @@
 import {randomUUID} from 'node:crypto';
 import {NextResponse} from 'next/server';
-import {authenticated,sameOrigin} from '@/lib/auth';
+import {authenticated,sameOrigin,currentUser} from '@/lib/auth';
 import {db,TENANT} from '@/lib/db';
 import {ensureWorkshopSchema} from '@/lib/workshop-schema';
 import {orderInput,publicOrder,validateOrder,type WorkOrder} from '@/lib/workshop';
+import {orderVisible,canManage,phoneKey} from '@/lib/access';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -17,7 +18,7 @@ export async function GET(request:Request){
     const tv=new URL(request.url).searchParams.get('view')==='tv';
     const rows=await db()`SELECT id,public_code,pos_reference,data,version,created_at::text,updated_at::text FROM work_orders WHERE tenant_id=${TENANT} ORDER BY updated_at DESC LIMIT 2001`;
     if(rows.length>2000)return NextResponse.json({error:'El taller supera 2.000 órdenes. Se requiere paginación antes de mostrar totales.'},{status:422});
-    const orders=rows.map(hydrate);
+    const user=(await currentUser())!;const orders=rows.map(hydrate).filter(o=>orderVisible(user,o));
     return NextResponse.json({orders:tv?orders.filter(o=>o.stage!=='delivered').map(publicOrder):orders,asOf:new Date().toISOString()});
   }catch{return NextResponse.json({error:'No se pudo cargar el taller. Reintenta para comprobar la conexión.'},{status:503})}
 }
@@ -26,14 +27,16 @@ export async function POST(request:Request){
   if(!sameOrigin(request))return new Response(null,{status:403});
   try{
     const parsed=orderInput.safeParse(await request.json());
-    if(!parsed.success)return NextResponse.json({error:'Completa número POS, equipo, falla, técnico y oficina. Revisa los límites de los campos.'},{status:400});
-    const input=parsed.data;
+    if(!parsed.success)return NextResponse.json({error:'Completa teléfono, cliente, equipo, falla, técnico y oficina. Revisa los límites de los campos.'},{status:400});
+    const input=parsed.data;const user=(await currentUser())!;if(!orderVisible(user,input.data))return NextResponse.json({error:'Asigna la orden a tu oficina y técnico autorizado.'},{status:403});if(input.action==='create'&&user.role==='staff'&&(input.data.diagnosis||input.data.tests_passed||input.data.approval_state!=='pos'))return NextResponse.json({error:'El diagnóstico y las autorizaciones corresponden al técnico o administración.'},{status:403});if(input.action==='create'&&!input.data.pos_reference)input.data.pos_reference='SE-'+randomUUID().slice(0,12).toUpperCase();
     await ensureWorkshopSchema();
     const result=await db().begin(async sql=>{
       await sql`SELECT pg_advisory_xact_lock(812624)`;
       const id=input.action==='create'?randomUUID():input.id;
       const before=input.action==='update'?(await sql`SELECT id,public_code,pos_reference,data,version,created_at::text,updated_at::text FROM work_orders WHERE tenant_id=${TENANT} AND id=${id} FOR UPDATE`)[0]:null;
       if(input.action==='update'&&!before)return {error:'La orden ya no está disponible.',status:404};
+      if(before&&!orderVisible(user,before.data))return {error:'Orden no disponible para tu perfil.',status:403};
+      if(user.role==='staff'&&before){const allowed=['customer_name','customer_phone','reported_fault','accessories','delivery_notes','pos_reference','technician'];if(Object.keys(input.data).some(k=>!allowed.includes(k)&&JSON.stringify(input.data[k as keyof typeof input.data])!==JSON.stringify(before.data[k])))return {error:'Staff puede actualizar recepción y datos del cliente; las etapas técnicas corresponden al técnico.',status:403};}
       if(before&&before.version!==(input.action==='update'?input.version:0))return {error:'Otra pantalla modificó la orden. Actualiza antes de guardar para conservar sus cambios.',status:409};
       const [quote]=before?await sql`SELECT status,response_evidence,lines FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY revision DESC LIMIT 1`:[];
       if(quote&&(input.data.approval_state!==quote.status||input.data.approval_evidence!==quote.response_evidence))return {error:'La autorización se modifica respondiendo la versión del presupuesto en Operación.',status:400};
@@ -44,11 +47,12 @@ export async function POST(request:Request){
       if(['ready','delivered'].includes(input.data.stage)&&quote&&(quote.lines as {kind:string;batch_id?:string;quantity:number}[]).some(l=>l.kind==='part'&&l.batch_id&&allocations.filter(p=>p.state==='consumed'&&p.batch_id===l.batch_id).reduce((n,p)=>n+p.quantity,0)<l.quantity))return {error:'Confirma el uso de las piezas incluidas en el presupuesto antes de marcar el equipo listo.',status:400};
       const invalid=validateOrder(input.data,before?.data);
       if(invalid)return {error:invalid,status:400};
+      const key=phoneKey(input.data.customer_phone);const [customer]=await sql`INSERT INTO customers(id,tenant_id,phone_key,display_phone,name) VALUES(${randomUUID()},${TENANT},${key},${input.data.customer_phone},${input.data.customer_name}) ON CONFLICT(tenant_id,phone_key) DO UPDATE SET name=excluded.name,display_phone=excluded.display_phone,updated_at=now() RETURNING id`;
       const code=before?.public_code??`SE-${randomUUID().slice(0,8).toUpperCase()}`;
       const [saved]=before
-        ?await sql`UPDATE work_orders SET data=${sql.json(input.data)},pos_reference=${input.data.pos_reference},version=version+1,updated_at=now() WHERE tenant_id=${TENANT} AND id=${id} RETURNING id,public_code,pos_reference,data,version,created_at::text,updated_at::text`
-        :await sql`INSERT INTO work_orders(id,tenant_id,public_code,pos_reference,data) VALUES(${id},${TENANT},${code},${input.data.pos_reference},${sql.json(input.data)}) RETURNING id,public_code,pos_reference,data,version,created_at::text,updated_at::text`;
-      await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},'operador',${before?'workshop_update':'workshop_create'},${id},${sql.json({before:before?.data??null,after:input.data,version:saved.version})})`;
+        ?await sql`UPDATE work_orders SET customer_id=${customer.id},data=${sql.json(input.data)},pos_reference=${input.data.pos_reference},version=version+1,updated_at=now() WHERE tenant_id=${TENANT} AND id=${id} RETURNING id,public_code,pos_reference,data,version,created_at::text,updated_at::text`
+        :await sql`INSERT INTO work_orders(id,tenant_id,public_code,pos_reference,data,customer_id) VALUES(${id},${TENANT},${code},${input.data.pos_reference},${sql.json(input.data)},${customer.id}) RETURNING id,public_code,pos_reference,data,version,created_at::text,updated_at::text`;
+      await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},${before?'workshop_update':'workshop_create'},${id},${sql.json({before:before?.data??null,after:input.data,version:saved.version})})`;
       await sql`INSERT INTO work_order_events(tenant_id,order_id,action,detail,stage,paused) VALUES(${TENANT},${id},${before?'update':'create'},${sql.json({technician:input.data.technician,office:input.data.office,pause_reason:input.data.pause_reason,tests_notes:input.data.tests_notes})},${input.data.stage},${Boolean(input.data.pause_reason)||['pending','declined'].includes(input.data.approval_state)||['pending','ordered'].includes(input.data.parts_state)})`;
       return {order:hydrate(saved)};
     });

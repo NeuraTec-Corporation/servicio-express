@@ -10,3 +10,5 @@ public/reader/
 
 # Portable backups contain private business data, even when encrypted.
 *.sebackup
+
+private/

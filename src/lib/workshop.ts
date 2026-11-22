@@ -1,15 +1,16 @@
 import {z} from 'zod';
+import {phoneKey} from './access';
 
 export const stages = {
   received:'Recibido', diagnosis:'Diagnóstico', repair:'En reparación', drying:'Secado',
   assembly:'Armado', testing:'Pruebas', ready:'Listo para entregar', delivered:'Entregado',
 } as const;
 export const partsStates = {not_required:'Sin piezas pendientes', pending:'Por pedir', ordered:'Pedidas', received:'Recibidas'} as const;
-export const approvalStates = {pos:'Autorización inicial del POS', pending:'Adicional pendiente', approved:'Adicional aprobado', declined:'Adicional rechazado'} as const;
+export const approvalStates = {pos:'Autorización inicial registrada', pending:'Adicional pendiente', approved:'Adicional aprobado', declined:'Adicional rechazado'} as const;
 const short = z.string().trim().max(160);
 export const orderFields = z.object({
-  pos_reference:short.min(1), device_type:z.enum(['phone','tablet','laptop','desktop','other']),
-  brand:short.min(1), model:short.min(1), customer_name:short.default(''), customer_phone:short.default(''),
+  pos_reference:short.default(''), device_type:z.enum(['phone','tablet','laptop','desktop','other']),
+  brand:short.min(1), model:short.min(1), customer_name:short.min(1), customer_phone:short.refine(s=>/^[0-9]{7,15}$/.test(phoneKey(s)),'Teléfono: entre 7 y 15 dígitos'),
   reported_fault:z.string().trim().min(1).max(4000), accessories:z.string().trim().max(2000).default(''),
   technician:short.min(1), office:short.min(1), diagnosis:z.string().trim().max(8000).default(''),
   stage:z.enum(Object.keys(stages) as [keyof typeof stages,...(keyof typeof stages)[]]).default('received'),
