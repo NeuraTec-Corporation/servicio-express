@@ -70,8 +70,10 @@ export async function POST(request:Request){
      if(order.data.stage!=='delivered')throw new Invalid('Marca el equipo entregado antes de registrar el cobro final.');
      if((await sql`SELECT entry_id FROM workshop_ledger_links WHERE tenant_id=${TENANT} AND source_id=${order.id} AND kind='settle'`).length)throw new Invalid('El cobro de esta orden ya está consolidado.',409);
      if(latest&&(latest.status!=='approved'||latest.currency!==input.currency||input.amount>Number(latest.total)))throw new Invalid('El cobro debe respetar la moneda y el máximo del presupuesto aprobado vigente.');
-     const used=await sql`SELECT quantity,unit_cost::float8,currency FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${order.id} AND state='consumed'`;
-     const known=input.labor_cost!==null&&used.every(p=>p.currency===input.currency);const cost=known?Math.round((used.reduce((n,p)=>n+p.quantity*p.unit_cost,0)+input.labor_cost!)*100)/100:null;
+     const used=await sql`SELECT batch_id,quantity,unit_cost::float8,currency FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${order.id} AND state='consumed'`;
+     const needed=(latest?.lines??[]) as {kind:string;batch_id?:string;quantity:number}[];
+     const partsKnown=(order.data.parts_state==='not_required'||used.length>0)&&needed.filter(l=>l.kind==='part').every(l=>l.batch_id&&used.filter(p=>p.batch_id===l.batch_id).reduce((n,p)=>n+p.quantity,0)>=l.quantity);
+     const known=input.labor_cost!==null&&partsKnown&&used.every(p=>p.currency===input.currency);const cost=known?Math.round((used.reduce((n,p)=>n+p.quantity*p.unit_cost,0)+input.labor_cost!)*100)/100:null;
      const entryId=randomUUID();await sql`INSERT INTO management_entries ${sql({id:entryId,tenant_id:TENANT,entry_type:'repair',category:'service',occurred_on:new Date().toISOString().slice(0,10),brand:order.data.brand,model:order.data.model,technician:order.data.technician,office:order.data.office,quantity:1,unit_cost:cost,unit_price:input.amount,currency:input.currency,notes:`Orden ${order.public_code}. Cobro confirmado en POS: ${input.pos_receipt}`})}`;
      await sql`INSERT INTO workshop_ledger_links(tenant_id,entry_id,source_id,kind) VALUES(${TENANT},${entryId},${order.id},'settle')`;
     }else if(input.action==='quote'){

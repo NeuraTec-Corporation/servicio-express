@@ -35,12 +35,13 @@ export async function POST(request:Request){
       const before=input.action==='update'?(await sql`SELECT id,public_code,pos_reference,data,version,created_at::text,updated_at::text FROM work_orders WHERE tenant_id=${TENANT} AND id=${id} FOR UPDATE`)[0]:null;
       if(input.action==='update'&&!before)return {error:'La orden ya no está disponible.',status:404};
       if(before&&before.version!==(input.action==='update'?input.version:0))return {error:'Otra pantalla modificó la orden. Actualiza antes de guardar para conservar sus cambios.',status:409};
-      const [quote]=before?await sql`SELECT status,response_evidence FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY revision DESC LIMIT 1`:[];
+      const [quote]=before?await sql`SELECT status,response_evidence,lines FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY revision DESC LIMIT 1`:[];
       if(quote&&(input.data.approval_state!==quote.status||input.data.approval_evidence!==quote.response_evidence))return {error:'La autorización se modifica respondiendo la versión del presupuesto en Operación.',status:400};
-      const allocations=before?await sql`SELECT state FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${id} AND state!='returned'`:[];
+      const allocations=before?await sql`SELECT state,batch_id,quantity FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${id} AND state!='returned'`:[];
       if(before&&input.data.stage!==before.data.stage&&(await sql`SELECT entry_id FROM workshop_ledger_links WHERE tenant_id=${TENANT} AND source_id=${id} AND kind='settle'`).length)return {error:'La orden tiene cobro consolidado. Registra una nueva orden vinculada al POS para garantía o trabajo adicional.',status:400};
       if(allocations.length&&before?.data.office!==input.data.office)return {error:'Devuelve las piezas asignadas antes de cambiar la oficina de la orden.',status:400};
       if(['ready','delivered'].includes(input.data.stage)&&allocations.some(p=>p.state==='reserved'))return {error:'Registra el consumo o devuelve las piezas reservadas antes de marcar el equipo listo.',status:400};
+      if(['ready','delivered'].includes(input.data.stage)&&quote&&(quote.lines as {kind:string;batch_id?:string;quantity:number}[]).some(l=>l.kind==='part'&&l.batch_id&&allocations.filter(p=>p.state==='consumed'&&p.batch_id===l.batch_id).reduce((n,p)=>n+p.quantity,0)<l.quantity))return {error:'Confirma el uso de las piezas incluidas en el presupuesto antes de marcar el equipo listo.',status:400};
       const invalid=validateOrder(input.data,before?.data);
       if(invalid)return {error:invalid,status:400};
       const code=before?.public_code??`SE-${randomUUID().slice(0,8).toUpperCase()}`;
