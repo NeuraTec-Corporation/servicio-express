@@ -17,19 +17,20 @@ export async function POST(request:Request){
   if(Number(request.headers.get('content-length'))>4.2*1024*1024)throw new Error('El archivo supera 4 MB.');
   const form=await request.formData();const id=z.uuid().parse(form.get('order_id'));const caption=z.string().trim().min(1).max(500).parse(form.get('caption'));const file=form.get('file');
   if(!(file instanceof File)||!file.size||file.size>4*1024*1024)throw new Error('Selecciona una imagen o PDF de hasta 4 MB.');
+  const issueId=form.get('issue_id')?z.uuid().parse(form.get('issue_id')):null,requestId=form.get('request_id')?z.uuid().parse(form.get('request_id')):null,kind=z.enum(['general','old_part','expected_part','received_part']).parse(form.get('evidence_kind')||'general');
   const bytes=Buffer.from(await file.arrayBuffer());let type='';
   if(bytes.subarray(0,5).toString()==='%PDF-')type='application/pdf';
   else if(bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff)type='image/jpeg';
   else if(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))type='image/png';
   else if(bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP')type='image/webp';
-  if(!type)throw new Error('Solo se admiten fotografías PNG/JPG/WEBP o PDF.');
+  if(kind!=='general'&&!type.startsWith('image/'))throw new Error('La evidencia de pieza debe ser una imagen.');if(!type)throw new Error('Solo se admiten fotografías PNG/JPG/WEBP o PDF.');
   await ensureWorkshopSchema();await db().begin(async sql=>{
    await sql`SELECT pg_advisory_xact_lock(812624)`;
-   const [order]=await sql`SELECT data FROM work_orders WHERE tenant_id=${TENANT} AND id=${id}`;if(!order||!orderVisible(user,order.data))throw new Error('Orden no disponible.');
+   const [order]=await sql`SELECT data FROM work_orders WHERE tenant_id=${TENANT} AND id=${id}`;if(!order||!orderVisible(user,order.data))throw new Error('Orden no disponible.');if(issueId&&!order.data.workflow?.issues.some((i:{id:string})=>i.id===issueId))throw new Error('Daño no disponible.');if(requestId&&!order.data.workflow?.requests.some((r:{id:string;issue_id:string})=>r.id===requestId&&(!issueId||r.issue_id===issueId)))throw new Error('Solicitud no disponible.');if(kind==='old_part'&&!issueId||['expected_part','received_part'].includes(kind)&&!requestId)throw new Error('Vincula la evidencia con su daño o solicitud.');
    const [size]=await sql`SELECT coalesce(sum(octet_length(original)),0)::float8 AS bytes,count(*) FILTER(WHERE order_id=${id})::int AS files FROM work_order_media WHERE tenant_id=${TENANT}`;
    if(size.files>=12)throw new Error('La orden ya tiene 12 evidencias. Selecciona las fotografías necesarias.');
    if(size.bytes+bytes.length>100*1024*1024)throw new Error('Se alcanzó el espacio de evidencias reservado para el laboratorio. Revisa el almacenamiento antes de ampliarlo.');
-   const mediaId=randomUUID();await sql`INSERT INTO work_order_media(id,tenant_id,order_id,filename,media_type,caption,original) VALUES(${mediaId},${TENANT},${id},${file.name.slice(0,180)},${type},${caption},${bytes})`;
+   const mediaId=randomUUID();await sql`INSERT INTO work_order_media(id,tenant_id,order_id,filename,media_type,caption,original,issue_id,request_id,evidence_kind) VALUES(${mediaId},${TENANT},${id},${file.name.slice(0,180)},${type},${caption},${bytes},${issueId},${requestId},${kind})`;
    await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},'workshop_evidence',${id},${sql.json({media_id:mediaId,caption,bytes:bytes.length})})`;
   });return NextResponse.json({ok:true});
  }catch(e){return NextResponse.json({error:e instanceof z.ZodError?'Indica la orden y descripción de la evidencia.':e instanceof Error?e.message:'No se pudo guardar la evidencia'},{status:400})}

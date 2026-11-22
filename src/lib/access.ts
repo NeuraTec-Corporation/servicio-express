@@ -6,7 +6,7 @@ export function canManage(role:Role){return ['it','owner','manager'].includes(ro
 export function orderVisible(user:Account,data:{technician?:string;office?:string}){
  if(canManage(user.role))return true;
  if(user.role==='staff')return data.office===user.office;
- return (data.technician===user.code||data.technician===user.display_name)&&data.office===user.office;
+ return (!data.technician||data.technician===user.code||data.technician===user.display_name)&&data.office===user.office;
 }
 export function routeAllowed(role:Role,path:string,method:string,action=''){
  if(path.startsWith('/api/accounts'))return role==='it';
@@ -17,9 +17,11 @@ export function routeAllowed(role:Role,path:string,method:string,action=''){
  if(path==='/api/management')return canManage(role);
  if(path==='/api/publish'||path.startsWith('/api/policy'))return canManage(role);
  if(path==='/api/import')return canManage(role);
+ if(path==='/api/workshop/v2')return true;
  if(path==='/api/workshop/inventory-controls')return method==='GET'||canManage(role);
  if(path==='/api/workshop/operations'&&method==='POST'){
-  if(['decide','settle','transfer','supplier_return'].includes(action))return canManage(role);
+  if(['settle','transfer','supplier_return'].includes(action))return canManage(role);
+  if(action==='decide')return true;
   if(['reserve','consume','return','quote'].includes(action))return role!=='staff';
   return canManage(role)||role==='staff';
  }
