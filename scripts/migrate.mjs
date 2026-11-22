@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import {readFile,readdir} from 'node:fs/promises';
+if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL no configurada. No se ejecutó ninguna migración.');
 const sql=postgres(process.env.DATABASE_URL,{ssl:'require',max:1});
 try {
  await sql`CREATE TABLE IF NOT EXISTS schema_migrations(version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`;
