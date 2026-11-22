@@ -2,7 +2,6 @@ import {cookies} from 'next/headers';
 import {createHmac,randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
 import {randomUUID} from 'node:crypto';
 import {db,TENANT} from './db';
-import {ensureIdentity} from './identity';
 import type {Account} from './access';
 export function passwordMatches(password:string,stored:string){try{const [salt,hash]=stored.split(':');const actual=scryptSync(password,salt,64);const expected=Buffer.from(hash,'hex');return expected.length===actual.length&&timingSafeEqual(actual,expected)}catch{return false}}
 export function sessionToken(identity?:{uid:string;sid:string}){const payload=Buffer.from(JSON.stringify({exp:Date.now()+8*3600000,nonce:randomBytes(16).toString('hex'),...identity})).toString('base64url');return payload+'.'+createHmac('sha256',secret()).update(payload).digest('base64url')}
@@ -11,7 +10,8 @@ export function validToken(token:string){try{const [p,s]=token.split('.');const 
 export async function userFromToken(token:string):Promise<Account|null>{
  if(!validToken(token))return null;const p=JSON.parse(Buffer.from(token.split('.')[0],'base64url').toString());
  if(typeof p.uid!=='string'||typeof p.sid!=='string'||!/^[-a-f0-9]{36}$/.test(p.uid)||!/^[-a-f0-9]{36}$/.test(p.sid))return null;
- await ensureIdentity();const [u]=await db()`SELECT u.id,u.code,u.role,u.display_name,u.office,u.active,u.must_change,u.session_epoch FROM app_users u JOIN app_sessions s ON s.user_id=u.id AND s.tenant_id=u.tenant_id WHERE u.tenant_id=${TENANT} AND u.id=${p.uid} AND s.id=${p.sid} AND s.expires_at>now() AND s.epoch=u.session_epoch AND u.active=true`;
+ // Login initializes accounts; session checks must not execute filesystem migrations in Proxy.
+ const [u]=await db()`SELECT u.id,u.code,u.role,u.display_name,u.office,u.active,u.must_change,u.session_epoch FROM app_users u JOIN app_sessions s ON s.user_id=u.id AND s.tenant_id=u.tenant_id WHERE u.tenant_id=${TENANT} AND u.id=${p.uid} AND s.id=${p.sid} AND s.expires_at>now() AND s.epoch=u.session_epoch AND u.active=true`;
  return u?u as Account:null;
 }
 export async function currentUser(){return userFromToken((await cookies()).get('se_session')?.value??'')}
