@@ -25,3 +25,5 @@ La recepción física del ticket y el momento de incorporación al sistema se re
 Secado de tratamiento y curado de preentrega son pasos opcionales diferentes. Las pruebas fallidas vuelven a reparación sin borrar historial. Entrega y satisfacción son confirmaciones separadas. Listo exige daños aceptados resueltos, piezas consumidas y pruebas aprobadas.
 
 Verificación: comprobaciones enfocadas en autorización, compatibilidad, stock concurrente, recepción no conforme, varios daños, permisos, jornada y traducción. Una ejecución CI y un recorrido final por el nuevo flujo; no repetir los recorridos completos de V1 ni usar borrado general como prueba.
+
+Hallazgo de publicación: Proxy no empaqueta los SQL y la comprobación de sesión ejecutaba bootstrap/migración. El arranque autenticado devolvió ENOENT hasta ingresar. Se retira bootstrap de la consulta de sesión: login mantiene inicialización explícita y cada ruta de negocio aplica su esquema. La validación de sesión sigue comprobando usuario, sesión, caducidad y revocación en base.
