@@ -1,7 +1,7 @@
 import {createCipheriv,createDecipheriv,randomBytes,scryptSync} from 'node:crypto';
 import {gzipSync,gunzipSync} from 'node:zlib';
 import {db,TENANT} from './db';
-export const backupTables=['sources','variants','offers','purchases','sales','management_entries','work_orders','stock_batches','work_order_parts','work_order_quotes','work_order_events','work_order_media','workshop_commands','stock_movements','workshop_ledger_links','stock_reorder_rules'] as const;
+export const backupTables=['app_users','customers','sources','variants','offers','purchases','sales','management_entries','work_orders','stock_batches','work_order_parts','work_order_quotes','work_order_events','work_order_media','workshop_commands','stock_movements','workshop_ledger_links','stock_reorder_rules'] as const;
 type Table=typeof backupTables[number];
 type Row=Record<string,unknown>;
 type Archive={format:'servicio-express-backup-v1';created_at:string;tenant:string;migrations:string[];tables:Record<Table,Row[]>;audit:Row[]};
@@ -20,7 +20,8 @@ function decryptBackup(bytes:Buffer,passphrase:string):Archive {
  if(a.audit.some(r=>!r||r.tenant_id!==TENANT||typeof r.actor!=='string'||typeof r.action!=='string'||typeof r.entity_id!=='string'||typeof r.created_at!=='string'||!Number.isFinite(Date.parse(r.created_at))))throw new Error('Auditoría de respaldo inválida.');
  if(count>100000)throw new Error('El respaldo supera el volumen del recuperador del piloto.');return a;
 }
-export async function createBackup(passphrase:string){
+export async function createBackup(passphrase:string){return (await captureBackup(passphrase)).bytes}
+export async function captureBackup(passphrase:string){
  return db().begin('isolation level repeatable read read only',async sql=>{
   const columns=await sql`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema='public' AND table_name IN ${sql([...backupTables])}`;
   const tables={} as Record<Table,Row[]>;let count=0;
@@ -28,10 +29,10 @@ export async function createBackup(passphrase:string){
   const audit=await sql`SELECT * FROM audit_events WHERE tenant_id=${TENANT} ORDER BY id LIMIT 100001`;if(count+audit.length>100000)throw new Error('El respaldo supera el volumen del recuperador del piloto.');
   const migrations=await sql`SELECT version FROM schema_migrations ORDER BY version`;
   const archive:Archive={format:'servicio-express-backup-v1',created_at:new Date().toISOString(),tenant:TENANT,migrations:migrations.map(m=>m.version),tables,audit};
-  const bytes=encryptBackup(archive,passphrase);if(bytes.length>128*1024*1024)throw new Error('El respaldo requiere el procedimiento de base de datos por su tamaño.');return bytes;
+  const bytes=encryptBackup(archive,passphrase);if(bytes.length>128*1024*1024)throw new Error('El respaldo requiere el procedimiento de base de datos por su tamaño.');const [state]=await sql`SELECT revision::text FROM app_data_revision WHERE tenant_id=${TENANT}`;return {bytes,revision:String(state.revision)};
  });
 }
-const relations:[Table,string,Table,string][]=[['offers','variant_id','variants','id'],['offers','source_id','sources','id'],['purchases','variant_id','variants','id'],['sales','variant_id','variants','id'],['work_order_parts','order_id','work_orders','id'],['work_order_parts','batch_id','stock_batches','id'],['work_order_quotes','order_id','work_orders','id'],['work_order_events','order_id','work_orders','id'],['work_order_media','order_id','work_orders','id'],['stock_movements','batch_id','stock_batches','id'],['stock_movements','order_id','work_orders','id'],['workshop_ledger_links','entry_id','management_entries','id']];
+const relations:[Table,string,Table,string][]=[['work_orders','customer_id','customers','id'],['offers','variant_id','variants','id'],['offers','source_id','sources','id'],['purchases','variant_id','variants','id'],['sales','variant_id','variants','id'],['work_order_parts','order_id','work_orders','id'],['work_order_parts','batch_id','stock_batches','id'],['work_order_quotes','order_id','work_orders','id'],['work_order_events','order_id','work_orders','id'],['work_order_media','order_id','work_orders','id'],['stock_movements','batch_id','stock_batches','id'],['stock_movements','order_id','work_orders','id'],['workshop_ledger_links','entry_id','management_entries','id']];
 export async function recoverBackup(bytes:Buffer,passphrase:string,apply:boolean){
  const a=decryptBackup(bytes,passphrase);
  for(const [child,key,parent,pk]of relations){const ids=new Set(a.tables[parent].map(r=>r[pk]));if(a.tables[child].some(r=>r[key]!==null&&r[key]!==undefined&&!ids.has(r[key])))throw new Error(`Referencia incompleta en ${child}.${key}`);}
@@ -39,7 +40,7 @@ export async function recoverBackup(bytes:Buffer,passphrase:string,apply:boolean
  return db().begin(async sql=>{
   const current=(await sql`SELECT version FROM schema_migrations ORDER BY version`).map(r=>r.version);
   if(JSON.stringify(current)!==JSON.stringify(a.migrations))throw new Error('La versión del respaldo difiere del esquema instalado. Se requiere una migración de recuperación; no se aplicó ningún cambio.');
-  if(apply){await sql`SELECT pg_advisory_xact_lock(812622)`;await sql`SELECT pg_advisory_xact_lock(812623)`;await sql`SELECT pg_advisory_xact_lock(812624)`;await sql`LOCK TABLE ${sql([...backupTables])} IN EXCLUSIVE MODE`;for(const table of backupTables)if(table!=='workshop_commands'&&(await sql`SELECT 1 FROM ${sql(table)} WHERE tenant_id=${TENANT} LIMIT 1`).length)throw new Error('La base contiene datos. La recuperación no sobrescribe ni borra información; úsala únicamente en una instancia vacía.');}
+  if(apply){await sql`SELECT pg_advisory_xact_lock(812622)`;await sql`SELECT pg_advisory_xact_lock(812623)`;await sql`SELECT pg_advisory_xact_lock(812624)`;await sql`LOCK TABLE ${sql([...backupTables])} IN EXCLUSIVE MODE`;for(const table of backupTables)if(!['workshop_commands','app_users'].includes(table)&&(await sql`SELECT 1 FROM ${sql(table)} WHERE tenant_id=${TENANT} LIMIT 1`).length)throw new Error('La base contiene datos. La recuperación no sobrescribe ni borra información; úsala únicamente en una instancia vacía.');}
   const columns=await sql`SELECT table_name,column_name,data_type,is_identity FROM information_schema.columns WHERE table_schema='public' AND table_name IN ${sql([...backupTables])} ORDER BY ordinal_position`;
   const counts:Record<string,number>={};
   for(const table of backupTables){
@@ -47,7 +48,8 @@ export async function recoverBackup(bytes:Buffer,passphrase:string,apply:boolean
    const target=apply?table:'se_recovery_'+table;
    if(!apply)await sql`CREATE TEMP TABLE ${sql(target)} (LIKE ${sql(table)} INCLUDING ALL) ON COMMIT DROP`;
    const records=a.tables[table].map(row=>{if(Object.keys(row).some(k=>!metadata.some(c=>c.column_name===k)))throw new Error(`Columnas no reconocidas en ${table}`);const result:Row={};for(const c of metadata){if(c.is_identity==='YES')continue;const value=row[c.column_name];if(value===undefined)throw new Error(`Falta una columna de ${table}`);result[c.column_name]=c.data_type==='bytea'?Buffer.from(String(value),'base64'):c.data_type==='jsonb'?sql.json(value as never):value;}return result;});
-   if(apply&&table==='workshop_commands'){for(const row of records){const [existing]=await sql`SELECT digest FROM workshop_commands WHERE tenant_id=${TENANT} AND id=${String(row.id)}`;if(existing&&existing.digest!==row.digest)throw new Error('Conflicto de idempotencia: la recuperación no se aplicó.');}for(let i=0;i<records.length;i+=100)await sql`INSERT INTO ${sql(target)} ${sql(records.slice(i,i+100),...names)} ON CONFLICT(tenant_id,id) DO NOTHING`;}
+   if(apply&&table==='app_users'){for(let i=0;i<records.length;i+=100)await sql`INSERT INTO ${sql(target)} ${sql(records.slice(i,i+100),...names)} ON CONFLICT(tenant_id,code) DO NOTHING`;}
+   else if(apply&&table==='workshop_commands'){for(const row of records){const [existing]=await sql`SELECT digest FROM workshop_commands WHERE tenant_id=${TENANT} AND id=${String(row.id)}`;if(existing&&existing.digest!==row.digest)throw new Error('Conflicto de idempotencia: la recuperación no se aplicó.');}for(let i=0;i<records.length;i+=100)await sql`INSERT INTO ${sql(target)} ${sql(records.slice(i,i+100),...names)} ON CONFLICT(tenant_id,id) DO NOTHING`;}
    else for(let i=0;i<records.length;i+=100)await sql`INSERT INTO ${sql(target)} ${sql(records.slice(i,i+100),...names)}`;
    counts[table]=records.length;
   }

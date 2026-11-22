@@ -1,14 +1,15 @@
+import {canManage,orderVisible} from '@/lib/access';
 import {randomUUID} from 'node:crypto';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {authenticated,sameOrigin} from '@/lib/auth';
+import {authenticated,sameOrigin,currentUser} from '@/lib/auth';
 import {db,TENANT} from '@/lib/db';
 import {ensureWorkshopSchema} from '@/lib/workshop-schema';
 export const runtime='nodejs';export const dynamic='force-dynamic';
 const text=z.string().trim().min(1).max(160);
-export async function GET(){if(!await authenticated())return new Response(null,{status:401});try{await ensureWorkshopSchema();const rules=await db()`SELECT r.id,r.part,r.office,r.minimum,r.target,coalesce(sum(b.on_hand-b.reserved) FILTER(WHERE NOT b.cancelled),0)::int AS available,coalesce(sum(b.ordered_quantity-b.received_quantity) FILTER(WHERE NOT b.cancelled),0)::int AS incoming FROM stock_reorder_rules r LEFT JOIN stock_batches b ON b.tenant_id=r.tenant_id AND b.part=r.part AND b.office=r.office WHERE r.tenant_id=${TENANT} GROUP BY r.id ORDER BY r.office,r.part`;return NextResponse.json({rules})}catch{return NextResponse.json({error:'No se pudieron cargar las alertas de inventario'},{status:503})}}
+export async function GET(){if(!await authenticated())return new Response(null,{status:401});const user=(await currentUser())!;try{await ensureWorkshopSchema();const rules=await db()`SELECT r.id,r.part,r.office,r.minimum,r.target,coalesce(sum(b.on_hand-b.reserved) FILTER(WHERE NOT b.cancelled),0)::int AS available,coalesce(sum(b.ordered_quantity-b.received_quantity) FILTER(WHERE NOT b.cancelled),0)::int AS incoming FROM stock_reorder_rules r LEFT JOIN stock_batches b ON b.tenant_id=r.tenant_id AND b.part=r.part AND b.office=r.office WHERE r.tenant_id=${TENANT} GROUP BY r.id ORDER BY r.office,r.part`;return NextResponse.json({rules:canManage(user.role)?rules:rules.filter(r=>r.office===user.office)})}catch{return NextResponse.json({error:'No se pudieron cargar las alertas de inventario'},{status:503})}}
 export async function POST(request:Request){
- if(!await authenticated())return new Response(null,{status:401});if(!sameOrigin(request))return new Response(null,{status:403});
+ if(!await authenticated())return new Response(null,{status:401});const user=(await currentUser())!;if(!sameOrigin(request))return new Response(null,{status:403});
  try{
   const input=z.discriminatedUnion('action',[
    z.object({action:z.literal('rule'),part:text,office:text,minimum:z.number().int().min(0).max(10000),target:z.number().int().min(0).max(10000)}),
