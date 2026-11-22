@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {authenticated,sameOrigin} from '@/lib/auth';
+import {authenticated,sameOrigin,currentUser} from '@/lib/auth';
 import {verifyAdminPassword} from '@/lib/admin-auth';
 import {ensureWorkshopSchema} from '@/lib/workshop-schema';
 import {db,TENANT} from '@/lib/db';
@@ -8,7 +8,7 @@ import {createBackup,recoverBackup} from '@/lib/recovery';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=300;
 const credentials={password:z.string().min(1).max(1024),passphrase:z.string().min(12).max(256)};
 export async function POST(request:Request){
- if(!await authenticated())return new Response(null,{status:401});if(!sameOrigin(request))return new Response(null,{status:403});
+ if(!await authenticated())return new Response(null,{status:401});if((await currentUser())?.role!=='it')return new Response(null,{status:403});if(!sameOrigin(request))return new Response(null,{status:403});
  try{
   await ensureWorkshopSchema();
   if(request.headers.get('content-type')?.includes('multipart/form-data')){

@@ -1,3 +1,4 @@
+import {approvalCurrent,compatibleStock,verifiedStock,resolvedLines,partState} from '@/lib/workshop-v2';
 import {canManage,orderVisible} from '@/lib/access';
 import {createHash,randomUUID} from 'node:crypto';
 import {NextResponse} from 'next/server';
@@ -14,14 +15,14 @@ export async function GET(request:Request){
  if(!await authenticated())return new Response(null,{status:401});const user=(await currentUser())!;
  try{
   await ensureWorkshopSchema();const sql=db();const id=new URL(request.url).searchParams.get('orderId');
-  if(!id){const batches=await sql`SELECT id,part,brand,model,office,supplier,invoice,cancelled,unit_cost::float8,currency,ordered_quantity,received_quantity,on_hand,reserved,version,created_at::text FROM stock_batches WHERE tenant_id=${TENANT} ORDER BY created_at DESC LIMIT 2001`;if(batches.length>2000)throw new Invalid('Se requiere paginar el inventario antes de ampliar el reporte.',422);return NextResponse.json({batches:canManage(user.role)?batches:batches.filter(b=>b.office===user.office)})}
+  if(!id){const batches=await sql`SELECT id,part,brand,model,office,supplier,invoice,cancelled,condition,inspected,sku,compatible_models,unit_cost::float8,currency,ordered_quantity,received_quantity,on_hand,reserved,version,created_at::text FROM stock_batches WHERE tenant_id=${TENANT} ORDER BY created_at DESC LIMIT 2001`;if(batches.length>2000)throw new Invalid('Se requiere paginar el inventario antes de ampliar el reporte.',422);return NextResponse.json({batches:canManage(user.role)?batches:batches.filter(b=>b.office===user.office)})}
   if(!z.uuid().safeParse(id).success)throw new Invalid('Orden inválida');
   const [visible]=await sql`SELECT data FROM work_orders WHERE tenant_id=${TENANT} AND id=${id}`;if(!visible||!orderVisible(user,visible.data))throw new Invalid('Orden no disponible',404);
   const [quotes,parts,events,media]=await Promise.all([
-   sql`SELECT id,revision,currency,lines,total::float8,previous_total::float8,status,response_evidence,created_at::text,responded_at::text FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY revision DESC`,
+   sql`SELECT id,revision,currency,lines,plan_revision,approval_channel,respondent,total::float8,previous_total::float8,status,response_evidence,created_at::text,responded_at::text FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY revision DESC`,
    sql`SELECT p.id,p.batch_id,b.part,b.office,p.quantity,p.state,p.unit_cost::float8,p.currency FROM work_order_parts p JOIN stock_batches b ON b.tenant_id=p.tenant_id AND b.id=p.batch_id WHERE p.tenant_id=${TENANT} AND p.order_id=${id} ORDER BY p.created_at`,
    sql`SELECT id::text,action,detail,stage,paused,created_at::text FROM work_order_events WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY created_at,id`,
-   sql`SELECT id,filename,media_type,caption,created_at::text FROM work_order_media WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY created_at DESC`,
+   sql`SELECT id,filename,media_type,caption,issue_id,request_id,evidence_kind,created_at::text FROM work_order_media WHERE tenant_id=${TENANT} AND order_id=${id} ORDER BY created_at DESC`,
   ]);const settled=(await sql`SELECT entry_id FROM workshop_ledger_links WHERE tenant_id=${TENANT} AND source_id=${id} AND kind='settle'`).length>0;return NextResponse.json({quotes,parts,events,media,settled});
  }catch(e){return NextResponse.json({error:e instanceof Invalid?e.message:'No se pudo consultar la operación del taller'},{status:e instanceof Invalid?e.status:503})}
 }
@@ -57,7 +58,7 @@ export async function POST(request:Request){
      await sql`UPDATE stock_batches SET on_hand=on_hand-${input.quantity},version=version+1 WHERE tenant_id=${TENANT} AND id=${batch.id}`;
      await sql`INSERT INTO stock_movements(id,tenant_id,batch_id,kind,quantity) VALUES(${randomUUID()},${TENANT},${batch.id},${input.action},${input.quantity})`;
      if(input.action==='transfer'){
-      const destination=randomUUID();await sql`INSERT INTO stock_batches ${sql({id:destination,tenant_id:TENANT,part:batch.part,brand:batch.brand,model:batch.model,office:input.office,supplier:batch.supplier,invoice:batch.invoice,unit_cost:batch.unit_cost,currency:batch.currency,ordered_quantity:input.quantity,received_quantity:input.quantity,on_hand:input.quantity,reserved:0})}`;
+      const destination=randomUUID();await sql`INSERT INTO stock_batches ${sql({id:destination,tenant_id:TENANT,part:batch.part,brand:batch.brand,model:batch.model,office:input.office,supplier:batch.supplier,invoice:batch.invoice,unit_cost:batch.unit_cost,currency:batch.currency,ordered_quantity:input.quantity,received_quantity:input.quantity,on_hand:input.quantity,reserved:0,condition:batch.condition,inspected:batch.inspected,sku:batch.sku,compatible_models:sql.json(batch.compatible_models)})}`;
       await sql`INSERT INTO stock_movements(id,tenant_id,batch_id,kind,quantity) VALUES(${randomUUID()},${TENANT},${destination},'transfer_in',${input.quantity})`;
      }
     }
@@ -67,6 +68,7 @@ export async function POST(request:Request){
     if(order.version!==input.version)throw new Invalid('La orden cambió. Actualiza la ficha antes de continuar.',409);
     if(order.data.stage==='delivered'&&input.action!=='settle')throw new Invalid('La orden está entregada. Reábrela explícitamente antes de modificar su operación.');
     const [latest]=await sql`SELECT * FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${order.id} ORDER BY revision DESC LIMIT 1`;
+    const workflow=order.data.workflow;if(workflow&&['reserve','consume','settle'].includes(input.action)&&!approvalCurrent(workflow,latest))throw new Invalid('Falta aprobación del plan V2 actual.');if(workflow&&input.action==='decide'&&(!input.channel||!input.respondent||latest?.plan_revision!==workflow.revision))throw new Invalid('Registra canal y persona que responde a la versión actual.');if(workflow&&latest)latest.lines=resolvedLines(latest.lines,workflow.requests);
     let next={...order.data};
     if(input.action==='settle'){
      if(order.data.stage!=='delivered')throw new Invalid('Marca el equipo entregado antes de registrar el cobro final.');
@@ -79,15 +81,16 @@ export async function POST(request:Request){
      const entryId=randomUUID();await sql`INSERT INTO management_entries ${sql({id:entryId,tenant_id:TENANT,entry_type:'repair',category:'service',occurred_on:new Date().toISOString().slice(0,10),brand:order.data.brand,model:order.data.model,technician:order.data.technician,office:order.data.office,quantity:1,unit_cost:cost,unit_price:input.amount,currency:input.currency,notes:`Orden ${order.public_code}. Cobro confirmado en POS: ${input.pos_receipt}`})}`;
      await sql`INSERT INTO workshop_ledger_links(tenant_id,entry_id,source_id,kind) VALUES(${TENANT},${entryId},${order.id},'settle')`;
     }else if(input.action==='quote'){
+     if(workflow){if(input.lines.some(l=>l.issue_id&&!workflow.issues.some((i:{id:string})=>i.id===l.issue_id)))throw new Invalid('El concepto pertenece a otro daño.');if(!workflow.issues.length||workflow.issues.some((i:{confirmed:boolean;diagnosis:string;solution:string})=>!i.confirmed||!i.diagnosis||!i.solution))throw new Invalid('Confirma diagnóstico y solución de todos los daños.');const requests=workflow.requests.filter((r:{status:string})=>r.status!=='cancelled');for(const issue of workflow.issues.filter((i:{requires_part:boolean})=>i.requires_part))if(!requests.some((r:{issue_id:string})=>r.issue_id===issue.id))throw new Invalid('Falta planificar una pieza de un daño.');for(const r of requests){const ls=input.lines.filter(l=>l.request_id===r.id&&l.kind==='part');if(ls.reduce((n,l)=>n+l.quantity,0)!==r.quantity||ls.some(l=>l.unit_cost!==r.unit_cost||l.description!==r.description||l.issue_id!==r.issue_id||(l.batch_id&&l.batch_id!==r.batch_id))||r.currency!==input.currency)throw new Invalid('El presupuesto debe coincidir con piezas, cantidades y costos del plan.');}if(input.lines.some(l=>l.kind==='part'&&!requests.some((r:{id:string})=>r.id===l.request_id)))throw new Invalid('Vincula cada pieza con una solicitud del daño.');}
      const total=quoteTotal(input.lines);if(total>100000000)throw new Invalid('El presupuesto supera el importe permitido.');
      if(latest&&latest.currency!==input.currency)throw new Invalid('La moneda de la orden no puede cambiar entre versiones de presupuesto.');
      const [approved]=await sql`SELECT total FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${order.id} AND status='approved' ORDER BY revision DESC LIMIT 1`;
-     await sql`INSERT INTO work_order_quotes(id,tenant_id,order_id,revision,currency,lines,total,previous_total) VALUES(${randomUUID()},${TENANT},${order.id},${(latest?.revision??0)+1},${input.currency},${sql.json(input.lines)},${total},${approved?.total??null})`;
+     await sql`INSERT INTO work_order_quotes(id,tenant_id,order_id,revision,currency,lines,total,previous_total,plan_revision) VALUES(${randomUUID()},${TENANT},${order.id},${(latest?.revision??0)+1},${input.currency},${sql.json(input.lines)},${total},${approved?.total??null},${workflow?.revision??null})`;
      next={...next,approval_state:'pending',approval_evidence:''};
-     if(next.stage==='ready')next={...next,stage:'diagnosis',tests_passed:false};
+     if(next.stage==='ready'||workflow&&!['received','diagnosis'].includes(next.stage))next={...next,stage:'diagnosis',tests_passed:false,...(workflow?{workflow:{...workflow,technical_closed:false,cleaning_done:false}}:{})};
     }else if(input.action==='decide'){
      if(!latest||latest.id!==input.quote_id||latest.status!=='pending')throw new Invalid('Solo se responde la última versión pendiente del presupuesto.',409);
-     await sql`UPDATE work_order_quotes SET status=${input.status},response_evidence=${input.evidence},responded_at=now() WHERE tenant_id=${TENANT} AND id=${latest.id}`;
+     await sql`UPDATE work_order_quotes SET status=${input.status},response_evidence=${input.evidence},approval_channel=${input.channel??'unknown'},respondent=${input.respondent??''},responded_at=now() WHERE tenant_id=${TENANT} AND id=${latest.id}`;
      next={...next,approval_state:input.status,approval_evidence:input.evidence};
     }else{
      let allocation;
@@ -102,7 +105,7 @@ export async function POST(request:Request){
      if(!batch||(!canManage(user.role)&&batch.office!==user.office))throw new Invalid('Lote no disponible',404);
     if(batch.cancelled)throw new Invalid('El pedido fue cancelado.');
      const quantity=input.action==='reserve'?input.quantity:allocation!.quantity;
-     if(input.action!=='return'){
+     if(input.action!=='return'){if(workflow&&(!verifiedStock(batch)||!compatibleStock(batch,order.data)||workflow.requests.some((r:{batch_id:string;status:string;condition:string})=>r.status!=='cancelled'&&r.batch_id===batch.id&&r.condition!==batch.condition)))throw new Invalid('Verifica condición y compatibilidad del lote antes de asignarlo.');
       if(['pending','declined'].includes(next.approval_state)||latest&&latest.status!=='approved')throw new Invalid('Falta la aprobación vigente del trabajo antes de reservar o consumir.');
       if(batch.office!==next.office)throw new Invalid('La pieza está en otra oficina. Registra su traslado físico antes de asignarla.');
       if(latest&&batch.currency!==latest.currency)throw new Invalid('La pieza y el presupuesto deben estar expresados en la misma moneda.');
@@ -124,8 +127,9 @@ export async function POST(request:Request){
      await sql`INSERT INTO stock_movements(id,tenant_id,batch_id,order_id,kind,quantity) VALUES(${randomUUID()},${TENANT},${batchId},${order.id},${input.action},${quantity})`;
      next={...next,parts_state:'received'};
     }
+    if(next.workflow){const allocations=await sql`SELECT batch_id,state,quantity FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${order.id}`;next.parts_state=partState(next.workflow,allocations.map(a=>({batch_id:String(a.batch_id),state:String(a.state),quantity:Number(a.quantity)})));}
     await sql`UPDATE work_orders SET data=${sql.json(next)},version=version+1,updated_at=now() WHERE tenant_id=${TENANT} AND id=${order.id}`;
-    await sql`INSERT INTO work_order_events(tenant_id,order_id,action,detail,stage,paused) VALUES(${TENANT},${order.id},${input.action},${sql.json(input)},${next.stage},${Boolean(next.pause_reason)||['pending','declined'].includes(next.approval_state)||['pending','ordered'].includes(next.parts_state)})`;
+    const [lastEvent]=await sql`SELECT paused FROM work_order_events WHERE tenant_id=${TENANT} AND order_id=${order.id} ORDER BY created_at DESC,id DESC LIMIT 1`;const paused=next.workflow?(['quote','decide','settle'].includes(input.action)?true:Boolean(lastEvent?.paused)):Boolean(next.pause_reason)||['pending','declined'].includes(next.approval_state)||['pending','ordered'].includes(next.parts_state);await sql`INSERT INTO work_order_events(tenant_id,order_id,action,detail,stage,paused) VALUES(${TENANT},${order.id},${input.action},${sql.json({...input,actor:user.code,...(next.workflow?{_schedule:next.workflow.schedule}:{})})},${next.stage},${paused})`;
    }
    await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},${'workshop_'+input.action},${'order_id'in input?input.order_id:'batch_id'in input?input.batch_id:input.request_id},${sql.json(input)})`;
    await sql`INSERT INTO workshop_commands(id,tenant_id,digest) VALUES(${input.request_id},${TENANT},${digest})`;
@@ -149,13 +153,14 @@ export async function DELETE(request:Request){
     // Only the consolidated record is corrected. No POS refund, stock change or external payment occurs.
    }else if(input.target==='order'){
     const [order]=await sql`SELECT * FROM work_orders WHERE tenant_id=${TENANT} AND id=${input.id} FOR UPDATE`;if(!order||!orderVisible(user,order.data))throw new Invalid('Orden no disponible',404);
-    const parts=await sql`SELECT id FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${input.id} AND state!='returned'`;if(parts.length)throw new Invalid('Devuelve las piezas asignadas antes de borrar la orden.');
+    if(order.data.workflow?.requests.some((r:{status:string})=>['ordered','received','rejected'].includes(r.status)))throw new Invalid('La orden tiene pedidos V2 vinculados; conserva su trazabilidad.');const parts=await sql`SELECT id FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${input.id} AND state!='returned'`;if(parts.length)throw new Invalid('Devuelve las piezas asignadas antes de borrar la orden.');
     const [quotes,events,allocations]=await Promise.all([sql`SELECT * FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${input.id}`,sql`SELECT * FROM work_order_events WHERE tenant_id=${TENANT} AND order_id=${input.id}`,sql`SELECT * FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${input.id}`]);
     await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},'workshop_delete',${input.id},${sql.json({order,quotes,events,allocations})})`;
     await sql`DELETE FROM work_order_media WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_events WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`UPDATE stock_movements SET order_id=NULL WHERE tenant_id=${TENANT} AND order_id=${input.id}`;await sql`DELETE FROM work_orders WHERE tenant_id=${TENANT} AND id=${input.id}`;
    }else{
     const [batch]=await sql`SELECT * FROM stock_batches WHERE tenant_id=${TENANT} AND id=${input.id} FOR UPDATE`;if(!batch||(!canManage(user.role)&&batch.office!==user.office))throw new Invalid('Lote no disponible',404);
     if(batch.cancelled)throw new Invalid('El pedido fue cancelado.');
+    if((await sql`SELECT id FROM work_orders WHERE tenant_id=${TENANT} AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(data->'workflow'->'requests','[]'::jsonb)) r WHERE r->>'batch_id'=${input.id})`).length)throw new Invalid('Lote vinculado a una solicitud V2; conserva su trazabilidad.');
     if((await sql`SELECT id FROM work_order_parts WHERE tenant_id=${TENANT} AND batch_id=${input.id}`).length)throw new Invalid('El lote está vinculado con órdenes; conserva su trazabilidad.');
     const movements=await sql`SELECT * FROM stock_movements WHERE tenant_id=${TENANT} AND batch_id=${input.id}`;
     await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},'stock_delete',${input.id},${sql.json({batch,movements})})`;

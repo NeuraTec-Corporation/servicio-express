@@ -1,20 +1,21 @@
 import {z} from 'zod';
+import {workflowSchema} from './workshop-v2';
 import {phoneKey} from './access';
 
 export const stages = {
   received:'Recibido', diagnosis:'Diagnóstico', repair:'En reparación', drying:'Secado',
-  assembly:'Armado', testing:'Pruebas', ready:'Listo para entregar', delivered:'Entregado',
+  assembly:'Armado', repaired:'Reparado', pre_delivery:'Preentrega', cleaning:'Limpieza final', testing:'Pruebas', ready:'Listo para entregar', delivered:'Entregado',
 } as const;
-export const partsStates = {not_required:'Sin piezas pendientes', pending:'Por pedir', ordered:'Pedidas', received:'Recibidas'} as const;
+export const partsStates = {not_required:'Sin piezas pendientes', pending:'Por pedir', ordered:'Pedidas',nonconforming:'Repuesto en revisión',available:'En stock', received:'Recibidas'} as const;
 export const approvalStates = {pos:'Autorización inicial registrada', pending:'Adicional pendiente', approved:'Adicional aprobado', declined:'Adicional rechazado'} as const;
 const short = z.string().trim().max(160);
 export const orderFields = z.object({
-  pos_reference:short.default(''), device_type:z.enum(['phone','tablet','laptop','desktop','other']),
+  workflow:workflowSchema.optional(),pos_reference:short.default(''), device_type:z.enum(['phone','tablet','laptop','desktop','other']),
   brand:short.min(1), model:short.min(1), customer_name:short.min(1), customer_phone:short.refine(s=>/^[0-9]{7,15}$/.test(phoneKey(s)),'Teléfono: entre 7 y 15 dígitos'),
   reported_fault:z.string().trim().min(1).max(4000), accessories:z.string().trim().max(2000).default(''),
-  technician:short.min(1), office:short.min(1), diagnosis:z.string().trim().max(8000).default(''),
+  technician:short.default(''), office:short.min(1), diagnosis:z.string().trim().max(8000).default(''),
   stage:z.enum(Object.keys(stages) as [keyof typeof stages,...(keyof typeof stages)[]]).default('received'),
-  parts_state:z.enum(['not_required','pending','ordered','received']).default('not_required'),
+  parts_state:z.enum(['not_required','pending','ordered','nonconforming','available','received']).default('not_required'),
   approval_state:z.enum(['pos','pending','approved','declined']).default('pos'),
   approval_evidence:z.string().trim().max(2000).default(''),
   pause_reason:z.string().trim().max(1000).default(''),
@@ -43,7 +44,7 @@ export function validateOrder(next:OrderFields,previous?:OrderFields):string|nul
   if(next.approval_state==='approved'&&!next.approval_evidence.trim())return 'Registra la evidencia de aprobación del trabajo adicional.';
   if(next.stage==='delivered'&&previous?.stage!=='ready'&&previous?.stage!=='delivered')return 'Completa las pruebas y marca el equipo listo antes de entregarlo.';
   if((next.stage==='ready'||next.stage==='delivered')&&!next.tests_passed)return 'Confirma las pruebas finales antes de marcar el equipo listo.';
-  if((next.stage==='ready'||next.stage==='delivered')&&(['pending','declined'].includes(next.approval_state)||['pending','ordered'].includes(next.parts_state)))return 'Un equipo listo no puede tener piezas o autorización pendientes.';
+  if((next.stage==='ready'||next.stage==='delivered')&&(['pending','declined'].includes(next.approval_state)||['pending','ordered','nonconforming'].includes(next.parts_state)))return 'Un equipo listo no puede tener piezas o autorización pendientes.';
   const executing=['repair','drying','assembly','testing','ready','delivered'].includes(next.stage);
   if(executing&&!next.diagnosis.trim())return 'Registra el diagnóstico antes de iniciar la reparación.';
   // Work may remain at its present stage while approval/parts are pending, but cannot advance.
@@ -60,6 +61,6 @@ export function blankOrder():OrderFields {
 
 export function workshopCounts(orders:PublicOrder[]){
   const active=orders.filter(o=>o.stage!=='delivered');
-  return {active:active.length,waitingParts:active.filter(o=>['pending','ordered'].includes(o.parts_state)).length,
+  return {active:active.length,waitingParts:active.filter(o=>['pending','ordered','nonconforming'].includes(o.parts_state)).length,
     waitingApproval:active.filter(o=>o.approval_state==='pending').length,ready:active.filter(o=>o.stage==='ready').length};
 }

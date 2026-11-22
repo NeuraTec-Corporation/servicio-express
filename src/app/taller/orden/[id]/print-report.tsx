@@ -1,2 +1,3 @@
 'use client';
-export default function PrintReport(){return <button className="workshop-print-button" onClick={()=>window.print()}>Imprimir / guardar PDF</button>}
+import { useLocale } from "../../../locale";
+export default function PrintReport() { const { t: tr } = useLocale(); return <button className="workshop-print-button" onClick={() => window.print()}>{tr("Imprimir / guardar PDF")}</button>; }

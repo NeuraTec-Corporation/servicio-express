@@ -99,3 +99,16 @@ Se retiraron las CLI de Vercel/Neon de las dependencias de desarrollo de la apli
 ## Cuentas y búsqueda por teléfono
 
 Migración 006: cuentas nominativas IT/dueños/manager/técnicos/staff, permisos de servidor, asignación por oficina, cliente por teléfono y borrado condicionado a copia externa. Sin integración POS. La referencia externa es opcional. Las claves iniciales son privadas; no se publica ninguna en el repositorio. Guía operativa: [ACCESO-Y-RESPALDOS.md](ACCESO-Y-RESPALDOS.md).
+
+
+## V2 — daños, stock y acciones rápidas
+
+La auditoría está en [AUDITORIA-V2.md](AUDITORIA-V2.md). Migración 007 aditiva: catálogos bilingües, cinco mayoristas, condición/SKU/compatibilidad por lote, referencias de evidencias y versión del plan en presupuestos. Los daños y solicitudes tipados viven en el agregado JSON de cada orden. Las siete órdenes DEMO V1 mantienen datos e historial; las nuevas utilizan V2. Adopción explícita de V1 solo en recibido/diagnóstico sin piezas activas.
+
+V2 exige diagnóstico y solución confirmados, presupuesto vigente del plan aprobado con canal/respondente/evidencia, piezas compatibles y verificadas, reserva y recepción conforme antes de iniciar reparación. Registrar recepción no inicia trabajo. Pruebas, cierre técnico, curado aplicable, limpieza y entrega usan botones y validaciones de servidor. Fotos de pieza dañada/pedida/recibida se vinculan con su daño/solicitud. Pegar/arrastrar imágenes y cámara del dispositivo; no hay captura remota de pantallas ajenas.
+
+La captura es manual y duplicada respecto al POS por mandato. No existe conector ni envío de compras/comunicaciones. Los enlaces temporales solo admiten registros de pedido explícitamente DEMO; manager/IT/dueños reemplazan hasta cinco enlaces desde Inventario. Los lotes antiguos quedan físicamente contabilizados pero sin condición verificada: comprobarlos antes de usarlos en V2. No se infiere que sean nuevos o aptos.
+
+Selector ES/EN persistente en interfaz, TV y reporte. Los datos libres de cliente/técnico no se reescriben ni se traducen mediante IA. Jornada por orden configurable (inicial 15:00–20:00, America/New_York); los eventos guardan su horario para no recalcular el pasado con ajustes posteriores. El tiempo activo V2 excluye mañanas/noches fuera de jornada y pausas; curado mantiene duración de calendario. V1 conserva su semántica histórica, sin presentarla como fichaje.
+
+Los respaldos nuevos incluyen configuración V2 y validan referencias de daños/piezas/evidencias. Se exige coincidencia de migraciones para recuperar: los archivos anteriores a 007 necesitan un procedimiento de migración y no se aplican sobre este esquema automáticamente. No se realizó limpieza general ni recuperación destructiva.

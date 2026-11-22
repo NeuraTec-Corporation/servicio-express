@@ -24,3 +24,8 @@ Las estimaciones son del técnico; intervalos por etapa excluyen esperas/pausas 
 ## Ampliación de continuidad y cierre de pendientes
 
 Se añade migración 005: controles de reposición/cancelación y almacenamiento temporal de fragmentos cifrados de recuperación. Respaldo portátil y comprobación de restauración aislada; restauración definitiva únicamente sobre negocio vacío, nunca sobre los datos existentes. Copias externas programadas continúan pendientes de definir destino/custodia y verificar costo; no se activó servicio externo. Mínimos/objetivos y corrección/cancelación de pedidos sin recepción incorporados. Rotación de TV y etiquetas accesibles añadidas. Se evita duplicar el pipeline por push/PR; una sola comprobación final para esta ampliación, de acuerdo con el titular.
+
+
+## V2 — actualización vigente de implementación
+
+El alcance y la auditoría V2 sustituyen las limitaciones históricas de daño único, autorización inicial genérica, stock sin condición e interfaz solo español. Véanse README.md y AUDITORIA-V2.md. El POS sigue completamente fuera de integración: recepción manual duplicada. La publicación y evidencia de esta entrega se registran en Notion una vez terminadas; no confundir código local con migración aplicada.
