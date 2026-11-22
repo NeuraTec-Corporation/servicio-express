@@ -4,7 +4,7 @@ const qty=z.number().int().min(1).max(10000);
 const amount=z.number().finite().min(0).max(10000000).refine(n=>Math.abs(n*100-Math.round(n*100))<0.00001,'Máximo dos decimales');
 export const quoteLine=z.object({description:text,kind:z.enum(['part','labor']),quantity:qty,unit_cost:amount,markup_type:z.enum(['fixed','percent']),markup_value:amount,batch_id:z.uuid().optional()});
 export type QuoteLine=z.infer<typeof quoteLine>;
-export type StockBatch={id:string;part:string;brand:string;model:string;office:string;supplier:string;invoice:string;unit_cost:number;currency:string;ordered_quantity:number;received_quantity:number;on_hand:number;reserved:number;version:number;created_at:string};
+export type StockBatch={id:string;part:string;brand:string;model:string;office:string;supplier:string;invoice:string;unit_cost:number;currency:string;ordered_quantity:number;received_quantity:number;on_hand:number;reserved:number;version:number;created_at:string;cancelled?:boolean};
 export type PartAllocation={id:string;batch_id:string;part:string;quantity:number;state:'reserved'|'consumed'|'returned';unit_cost:number;currency:string;office:string};
 export type WorkQuote={id:string;revision:number;currency:string;lines:QuoteLine[];total:number;previous_total:number|null;status:'pending'|'approved'|'declined';response_evidence:string;created_at:string;responded_at:string|null};
 export type WorkEvent={id:string;action:string;detail:Record<string,unknown>;stage:string;paused:boolean;created_at:string};

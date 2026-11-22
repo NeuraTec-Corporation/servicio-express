@@ -7,3 +7,6 @@ test-results/
 ACCESS-PRIVATE.txt
 *.tsbuildinfo
 public/reader/
+
+# Portable backups contain private business data, even when encrypted.
+*.sebackup

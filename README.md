@@ -81,3 +81,16 @@ Dashboard → Taller y reparaciones: filtros por fecha de recepción, marca/mode
 Migraciones aditivas `003_workshop.sql` y `004_workshop_operations.sql`, aplicadas bajo bloqueo al primer acceso de taller o mediante `npm run db:migrate` con conexión privada configurada. No imprimir ni publicar secretos. Operaciones idempotentes por UUID/digest, bloqueo de escritura, control de versión, auditoría, sesión y origen. Limpieza integral incluye taller/inventario/evidencias; solo catálogo los conserva. Borrado individual exige clave y BORRAR y conserva auditoría.
 
 IA de comunicaciones diferida expresamente: el propietario aportará curso/código. No hay llamadas, mensajes automáticos, nuevas APIs de IA ni servicios pagos activados por esta entrega. Guía de continuidad y estado de publicación en `IMPLEMENTACION-TALLER.md`.
+
+
+## Respaldo, recuperación y reposición
+
+El botón Respaldo descarga un archivo `.sebackup` completo del negocio, originales, evidencias e historial. AES-256-GCM, clave derivada con scrypt y sal/nonce aleatorios. La clave de respaldo es elegida por el titular, de al menos 12 caracteres, y no se guarda; las credenciales de infraestructura y sesiones no se exportan. Conservar archivo y clave separados, fuera de la aplicación.
+
+La comprobación de recuperación reconstruye registros en tablas temporales con las restricciones del esquema y verifica sus referencias, sin modificar las tablas de negocio. Recuperar definitivamente requiere RESTAURAR, clave de acceso, clave de respaldo y una instancia sin datos de negocio. No borra ni sobrescribe la base existente. Identificadores de eventos de auditoría/cronología pueden reasignarse; se conserva la referencia original de auditoría en el detalle restaurado. Archivos de hasta 128 MB cifrados, carga en fragmentos de 2 MB, JSON descomprimido acotado a 256 MB y hasta 100.000 registros. Requiere la misma versión de migraciones; volúmenes superiores o cambios de versión necesitan procedimiento de base de datos. Fragmentos cifrados son temporales y se retiran tras comprobar/recuperar; cargas abandonadas caducan y se limpian al siguiente uso.
+
+No hay copias externas programadas ni retención destructiva automática. El respaldo externo automático requiere definir destino/custodia y verificar costos antes de activarlo; una copia en la misma base no se presenta como protección contra pérdida de esa base.
+
+Inventario incorpora mínimos/objetivo por referencia exacta y oficina; sugiere cantidad considerando disponibles y pedidos por llegar. No envía compras. Pedidos sin recepción pueden corregirse o cancelarse con auditoría y versión; lo recibido conserva costo e historial. TV rota páginas de ocho equipos cada 20 segundos, sin consultas adicionales por rotación. Filtros del taller tienen etiquetas accesibles explícitas.
+
+Se retiraron las CLI de Vercel/Neon de las dependencias de desarrollo de la aplicación: despliegue y administración usan los conectores, sin incluir herramientas operativas innecesarias. Verify se ejecuta una vez por PR, sin duplicar por push de rama/main. La entrega utiliza una sola comprobación final enfocada en la nueva recuperación, sin repetir los 22 recorridos de taller ya verificados.

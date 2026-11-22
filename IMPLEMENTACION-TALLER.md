@@ -19,3 +19,8 @@ Estado al preparar esta revisión: código y 44 pruebas locales aprobados; verif
 IA de comunicaciones diferida: el propietario aportará curso/código. No activar llamadas, mensajes, nuevas APIs IA o servicios pagos. Autenticación compartida de laboratorio de ocho horas; cuentas/roles individuales siguen diferidos. Técnicos y oficinas se asignan por nombre; no hay administración de identidades ni directorio de personal. La TV sigue requiriendo sesión propia, sin cuenta Google.
 
 Las estimaciones son del técnico; intervalos por etapa excluyen esperas/pausas registradas, no fichaje laboral. El OCR no garantiza campos estructurados ni publica sin revisión. Evidencias hasta 4 MB, 12 por orden y 100 MB en el piloto; revisar capacidad antes de ampliarla. Respaldo/recuperación programados, inventario con mínimos, contabilidad fiscal y conciliación automática de POS permanecen fuera de esta entrega. No se contrataron recursos adicionales ni planes.
+
+
+## Ampliación de continuidad y cierre de pendientes
+
+Se añade migración 005: controles de reposición/cancelación y almacenamiento temporal de fragmentos cifrados de recuperación. Respaldo portátil y comprobación de restauración aislada; restauración definitiva únicamente sobre negocio vacío, nunca sobre los datos existentes. Copias externas programadas continúan pendientes de definir destino/custodia y verificar costo; no se activó servicio externo. Mínimos/objetivos y corrección/cancelación de pedidos sin recepción incorporados. Rotación de TV y etiquetas accesibles añadidas. Se evita duplicar el pipeline por push/PR; una sola comprobación final para esta ampliación, de acuerdo con el titular.
