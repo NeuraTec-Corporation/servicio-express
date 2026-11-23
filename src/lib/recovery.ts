@@ -1,8 +1,9 @@
+import {countLine,validateCount} from './inventory-count';
 import {createCipheriv,createDecipheriv,randomBytes,scryptSync} from 'node:crypto';
 import {gzipSync,gunzipSync} from 'node:zlib';
 import {workflowSchema,validateWorkflow} from './workshop-v2';
 import {db,TENANT} from './db';
-export const backupTables=['app_users','customers','workshop_catalog','workshop_suppliers','sources','variants','offers','purchases','sales','management_entries','work_orders','stock_batches','work_order_parts','work_order_quotes','work_order_events','work_order_media','workshop_commands','stock_movements','workshop_ledger_links','stock_reorder_rules'] as const;
+export const backupTables=['app_users','user_preferences','inventory_counts','operational_signals','customers','workshop_catalog','workshop_suppliers','sources','variants','offers','purchases','sales','management_entries','work_orders','stock_batches','work_order_parts','work_order_quotes','work_order_events','work_order_media','workshop_commands','stock_movements','workshop_ledger_links','stock_reorder_rules'] as const;
 type Table=typeof backupTables[number];
 type Row=Record<string,unknown>;
 type Archive={format:'servicio-express-backup-v1';created_at:string;tenant:string;migrations:string[];tables:Record<Table,Row[]>;audit:Row[]};
@@ -37,7 +38,8 @@ const relations:[Table,string,Table,string][]=[['work_orders','customer_id','cus
 export async function recoverBackup(bytes:Buffer,passphrase:string,apply:boolean){
  const a=decryptBackup(bytes,passphrase);
  const stockIds=new Set(a.tables.stock_batches.map(r=>r.id)),supplierIds=new Set(a.tables.workshop_suppliers.map(r=>r.id));const workflows=new Map<string,ReturnType<typeof workflowSchema.parse>>();
- for(const row of a.tables.work_orders){const d=row.data as Record<string,unknown>;if(d?.workflow){const w=workflowSchema.parse(d.workflow);validateWorkflow(w);for(const r of w.requests)if(r.batch_id&&!stockIds.has(r.batch_id)||r.supplier_id&&!supplierIds.has(r.supplier_id))throw new Error('Respaldo V2 con referencia de pieza o proveedor incompleta.');workflows.set(String(row.id),w);}}
+ for(const row of a.tables.inventory_counts){const lines=countLine.array().parse(row.lines);validateCount(lines);if(lines.some(l=>l.batch_id&&!stockIds.has(l.batch_id)))throw new Error('Conteo con lote inexistente.');}
+ for(const row of a.tables.work_orders){const d=row.data as Record<string,unknown>;if(d?.workflow){const w=workflowSchema.parse(d.workflow);validateWorkflow(w);for(const r of w.requests)if(r.batch_id&&!stockIds.has(r.batch_id)||r.supplier_id&&!supplierIds.has(r.supplier_id))throw new Error('Respaldo V2 con referencia de pieza o proveedor incompleta.');if(w.authorization&&!a.tables.work_order_quotes.some(q=>q.id===w.authorization!.quote_id&&q.order_id===row.id))throw new Error('Autorización sin presupuesto de la misma orden.');workflows.set(String(row.id),w);}}
  for(const row of a.tables.work_order_media){const w=workflows.get(String(row.order_id));if(row.issue_id&&!w?.issues.some(i=>i.id===row.issue_id)||row.request_id&&!w?.requests.some(r=>r.id===row.request_id&&(!row.issue_id||r.issue_id===row.issue_id)))throw new Error('Respaldo V2 con evidencia fuera de su orden.');}
  for(const row of a.tables.work_order_quotes){const w=workflows.get(String(row.order_id));for(const l of row.lines as {request_id?:string;issue_id?:string;batch_id?:string}[]){if(l.request_id&&!w?.requests.some(r=>r.id===l.request_id)||l.issue_id&&!w?.issues.some(i=>i.id===l.issue_id)||l.batch_id&&!stockIds.has(l.batch_id))throw new Error('Respaldo V2 con presupuesto fuera de su alcance.');}}
  for(const r of a.tables.workshop_suppliers){const u=new URL(String(r.url));if(u.protocol!=='https:'||u.username||u.password)throw new Error('Enlace de mayorista no permitido en respaldo.');}

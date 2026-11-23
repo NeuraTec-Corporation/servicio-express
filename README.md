@@ -116,3 +116,7 @@ Los respaldos nuevos incluyen configuración V2 y validan referencias de daños/
 ## Taller rápido y entrega a recepción
 
 La ficha permite fallas múltiples desde recepción, accesos rápidos arrastrables, PIN privado, evidencias iniciales y navegación directa a presupuesto/fotos/tiempos. Entrega de taller a recepción y de recepción al cliente se registran separadas; las tarjetas/TV solo muestran equipos que siguen en taller. Filtros analíticos sin solapamientos y actualización con confirmación visible. [Guía funcional y explicación de controles](GUIA-TALLER-RAPIDO.md).
+
+## Operación y conteo
+
+Avisos operativos, autorización por reparación, recepción parcial, favoritos por cuenta y toma de inventario con lector/teclado. El saldo inicial no genera compras; costo desconocido permanece pendiente. [Guía de operación y toma de inventario](OPERACION-Y-CONTEO.md). Sin cambios de plan ni integración POS; IA pendiente del repositorio del titular.
