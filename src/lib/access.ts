@@ -17,6 +17,7 @@ export function routeAllowed(role:Role,path:string,method:string,action=''){
  if(path==='/api/management')return canManage(role);
  if(path==='/api/publish'||path.startsWith('/api/policy'))return canManage(role);
  if(path==='/api/import')return canManage(role);
+ if(path==='/api/preferences'||path==='/api/alerts'||path==='/api/workshop/counts')return true;
  if(path==='/api/workshop/handoff')return true;
  if(path==='/api/workshop/v2')return true;
  if(path==='/api/workshop/inventory-controls')return method==='GET'||canManage(role);

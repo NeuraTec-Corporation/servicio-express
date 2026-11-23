@@ -40,13 +40,13 @@ export function validateOrder(next:OrderFields,previous?:OrderFields):string|nul
   if(!previous&&next.stage!=='received')return 'Una orden nueva comienza como recibida.';
   if(next.approval_state==='approved'&&!next.approval_evidence.trim())return 'Registra la evidencia de aprobación del trabajo adicional.';
   if(next.stage==='delivered'&&previous?.stage!=='ready'&&previous?.stage!=='front_desk'&&previous?.stage!=='delivered')return 'Completa las pruebas y marca el equipo listo antes de entregarlo.';
-  if((next.stage==='ready'||next.stage==='delivered')&&!next.tests_passed)return 'Confirma las pruebas finales antes de marcar el equipo listo.';
-  if((next.stage==='ready'||next.stage==='delivered')&&(['pending','declined'].includes(next.approval_state)||['pending','ordered','nonconforming'].includes(next.parts_state)))return 'Un equipo listo no puede tener piezas o autorización pendientes.';
+  if((next.stage==='ready'||next.stage==='delivered')&&!next.tests_passed&&next.workflow?.closure_outcome!=='unrepaired')return 'Confirma las pruebas finales antes de marcar el equipo listo.';
+  if((next.stage==='ready'||next.stage==='delivered')&&((next.approval_state==='pending'||next.approval_state==='declined'&&next.workflow?.closure_outcome!=='unrepaired')||['pending','ordered','nonconforming'].includes(next.parts_state)))return 'Un equipo listo no puede tener piezas o autorización pendientes.';
   const executing=['repair','drying','assembly','testing','ready','delivered'].includes(next.stage);
   if(executing&&!next.diagnosis.trim())return 'Registra el diagnóstico antes de iniciar la reparación.';
   // Work may remain at its present stage while approval/parts are pending, but cannot advance.
   if(next.stage!==previous?.stage&&executing){
-    if(next.approval_state==='pending'||next.approval_state==='declined')return 'Resuelve la autorización adicional antes de avanzar.';
+    if(next.approval_state==='pending'||next.approval_state==='declined'&&next.workflow?.closure_outcome!=='unrepaired')return 'Resuelve la autorización adicional antes de avanzar.';
     if(next.parts_state==='pending'||next.parts_state==='ordered')return 'Confirma la recepción de las piezas antes de avanzar.';
   }
   return null;

@@ -1,13 +1,13 @@
 import {z} from 'zod';
-import {businessMinutes,scheduleSchema,type Workflow} from './workshop-v2';
+import {businessMinutes,scheduleSchema,authorizationSchema,type Workflow,type IssueAuthorization} from './workshop-v2';
 const text=z.string().trim().min(1).max(160);
 const qty=z.number().int().min(1).max(10000);
 const amount=z.number().finite().min(0).max(10000000).refine(n=>Math.abs(n*100-Math.round(n*100))<0.00001,'Máximo dos decimales');
 export const quoteLine=z.object({description:text,kind:z.enum(['part','labor']),quantity:qty,unit_cost:amount,markup_type:z.enum(['fixed','percent']),markup_value:amount,batch_id:z.uuid().optional(),request_id:z.uuid().optional(),issue_id:z.uuid().optional()});
 export type QuoteLine=z.infer<typeof quoteLine>;
-export type StockBatch={id:string;part:string;brand:string;model:string;office:string;supplier:string;invoice:string;unit_cost:number;currency:string;ordered_quantity:number;received_quantity:number;on_hand:number;reserved:number;version:number;created_at:string;cancelled?:boolean;condition?:string;inspected?:boolean;sku?:string;compatible_models?:string[]};
+export type StockBatch={id:string;part:string;brand:string;model:string;office:string;supplier:string;invoice:string;unit_cost:number;currency:string;ordered_quantity:number;received_quantity:number;on_hand:number;reserved:number;version:number;created_at:string;cancelled?:boolean;origin?:string;cost_known?:boolean;barcode?:string;condition?:string;inspected?:boolean;sku?:string;compatible_models?:string[]};
 export type PartAllocation={id:string;batch_id:string;part:string;quantity:number;state:'reserved'|'consumed'|'returned';unit_cost:number;currency:string;office:string};
-export type WorkQuote={id:string;revision:number;currency:string;lines:QuoteLine[];total:number;previous_total:number|null;status:'pending'|'approved'|'declined';response_evidence:string;created_at:string;responded_at:string|null};
+export type WorkQuote={issue_authorization?:IssueAuthorization|null;plan_revision?:number|null;id:string;revision:number;currency:string;lines:QuoteLine[];total:number;previous_total:number|null;status:'pending'|'approved'|'declined';response_evidence:string;created_at:string;responded_at:string|null};
 export type WorkEvent={id:string;action:string;detail:Record<string,unknown>;stage:string;paused:boolean;created_at:string};
 export type WorkMedia={id:string;filename:string;media_type:string;caption:string;created_at:string};
 export type OrderDetail={quotes:WorkQuote[];parts:PartAllocation[];events:WorkEvent[];media:WorkMedia[];settled:boolean};
@@ -22,7 +22,7 @@ export const operationInput=z.discriminatedUnion('action',[
  z.object({...request,...orderRef,action:z.literal('consume'),allocation_id:z.uuid()}),
  z.object({...request,...orderRef,action:z.literal('return'),allocation_id:z.uuid(),confirmed_usable:z.literal(true)}),
  z.object({...request,...orderRef,action:z.literal('quote'),currency:z.string().regex(/^[A-Z]{3}$/),lines:z.array(quoteLine).min(1).max(50)}),
- z.object({...request,...orderRef,action:z.literal('decide'),quote_id:z.uuid(),status:z.enum(['approved','declined']),channel:z.enum(['onsite','phone','sms','whatsapp','pos']).optional(),respondent:z.string().trim().min(1).max(160).optional(),evidence:z.string().trim().min(8).max(2000)}),
+ z.object({...request,...orderRef,action:z.literal('decide'),quote_id:z.uuid(),status:z.enum(['approved','declined']),issue_decisions:z.array(z.object({issue_id:z.uuid(),status:z.enum(['approved','declined','pending'])})).max(30).optional(),shared_status:z.enum(['approved','declined','pending']).optional(),channel:z.enum(['onsite','phone','sms','whatsapp','pos']).optional(),respondent:z.string().trim().min(1).max(160).optional(),evidence:z.string().trim().min(8).max(2000)}),
  z.object({...request,...orderRef,action:z.literal('settle'),amount,currency:z.string().regex(/^[A-Z]{3}$/),labor_cost:amount.nullable(),pos_receipt:text,confirmed_collected:z.literal(true)}),
 ]);
 export function lineTotal(line:QuoteLine){
@@ -42,3 +42,5 @@ export function stageDurations(events:WorkEvent[],now=Date.now(),schedule?:Workf
  }
  return totals;
 }
+
+export function authorizedQuoteTotal(q:{status?:unknown;total?:unknown;lines?:unknown;issue_authorization?:unknown}){if(q.status!=='approved')return 0;const a=q.issue_authorization?authorizationSchema.parse(q.issue_authorization):null;if(!a)return Number(q.total);const lines=quoteLine.array().parse(q.lines);return quoteTotal(lines.filter(l=>l.issue_id?a.items.some(i=>i.issue_id===l.issue_id&&i.status==='approved'):a.shared_status==='approved'));}
