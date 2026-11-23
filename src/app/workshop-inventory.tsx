@@ -12,14 +12,14 @@ import { api, money } from '@/lib/ui-data';
 import { stockAvailable, type StockBatch } from '@/lib/workshop-operations';
 export default function WorkshopInventory() {
     const { t: tr } = useLocale();
-    const [counting,setCounting]=useState(false),[costing,setCosting]=useState<StockBatch|null>(null);const [movement,setMovement]=useState<{batch:StockBatch;action:'receive'|'transfer'|'supplier_return'}|null>(null),[manager,setManager]=useState(false);useEffect(()=>{void api('/api/me').then(j=>setManager(canManage(j.user.role)))},[]);
+    const [inventoryLoaded,setInventoryLoaded]=useState(false);const [counting,setCounting]=useState(false),[costing,setCosting]=useState<StockBatch|null>(null);const [movement,setMovement]=useState<{batch:StockBatch;action:'receive'|'transfer'|'supplier_return'}|null>(null),[manager,setManager]=useState(false);useEffect(()=>{void api('/api/me').then(j=>setManager(canManage(j.user.role)))},[]);
     const [inspecting, setInspecting] = useState<StockBatch | null>(null);
     const [editing, setEditing] = useState<StockBatch | null>(null), [generation, setGeneration] = useState(0), [showCancelled, setShowCancelled] = useState(false);
     const [batches, setBatches] = useState<StockBatch[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false), [showForm, setShowForm] = useState(false), [search, setSearch] = useState(''), [office, setOffice] = useState('');
     const [draft, setDraft] = useState({ part: '', brand: '', model: '', office: '', supplier: '', invoice: '', unit_cost: 0, currency: 'USD', ordered_quantity: 1 });
     const load = useCallback(async () => {
         try {
-            setBatches((await api('/api/workshop/operations')).batches);
+            setBatches((await api('/api/workshop/operations')).batches);setInventoryLoaded(true);
             setGeneration(v => v + 1);
             setError('');
         }
@@ -29,7 +29,7 @@ export default function WorkshopInventory() {
     }, []);
     useEffect(() => { void load(); }, [load]);
     const filtered = batches.filter(b => (showCancelled || !b.cancelled) && (!office || b.office === office) && `${b.part} ${b.brand} ${b.model} ${b.supplier} ${b.invoice}`.toLowerCase().includes(search.toLowerCase()));
-    return <section className="workshop-inventory"><div className="quick-choices"><button onClick={()=>setCounting(false)} className={!counting?'selected':''}>{tr('Pedidos y existencias','Orders and stock')}</button><button onClick={()=>setCounting(true)} className={counting?'selected':''}>{tr('Toma de inventario / saldo inicial','Inventory count / opening stock')}</button></div>{counting?<InventoryCount batches={batches} onChanged={load}/>:<><div className="workshop-heading"><div><h2>{tr("Repuestos e inventario")}</h2><p>{tr("Pedidos, recepci\u00F3n f\u00EDsica y existencias reservadas por oficina.")}</p></div><button className="primary" onClick={() => setShowForm(!showForm)}>{showForm ? tr("Cerrar formulario") : tr("\uFF0B Registrar pedido / lote")}</button></div>{error && <p className="error banner" role="alert">{tr(error)}</p>}{showForm && <form className="workshop-stock-form" onSubmit={async (e) => {
+    return <section className="workshop-inventory"><div className="quick-choices"><button onClick={()=>setCounting(false)} className={!counting?'selected':''}>{tr('Pedidos y existencias','Orders and stock')}</button><button disabled={!inventoryLoaded||busy} onClick={()=>setCounting(true)} className={counting?'selected':''}>{tr('Toma de inventario / saldo inicial','Inventory count / opening stock')}</button></div>{counting?<InventoryCount batches={batches} onChanged={load}/>:<><div className="workshop-heading"><div><h2>{tr("Repuestos e inventario")}</h2><p>{tr("Pedidos, recepci\u00F3n f\u00EDsica y existencias reservadas por oficina.")}</p></div><button className="primary" onClick={() => setShowForm(!showForm)}>{showForm ? tr("Cerrar formulario") : tr("\uFF0B Registrar pedido / lote")}</button></div>{error && <p className="error banner" role="alert">{tr(error)}</p>}{showForm && <form className="workshop-stock-form" onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
