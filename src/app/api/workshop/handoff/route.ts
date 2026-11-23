@@ -1,0 +1,23 @@
+import {z} from 'zod';
+import {createHash} from 'node:crypto';
+import {currentUser,sameOrigin} from '@/lib/auth';
+import {orderVisible} from '@/lib/access';
+import {db,TENANT} from '@/lib/db';
+import {ensureWorkshopSchema} from '@/lib/workshop-schema';
+import {approvalCurrent} from '@/lib/workshop-v2';
+import type {OrderFields} from '@/lib/workshop';
+const input=z.object({request_id:z.uuid(),order_id:z.uuid(),version:z.number().int().positive(),to:z.enum(['front_desk','client']),notes:z.string().trim().min(3).max(4000),collection_reference:z.string().trim().max(160).default(''),reference_amount:z.number().min(0).max(1e7).nullable().default(null),satisfaction:z.enum(['pending','satisfied','not_satisfied']).default('pending')});
+class Invalid extends Error{constructor(message:string,public status=400){super(message)}}
+export async function POST(request:Request){const user=await currentUser();if(!user||user.must_change)return new Response(null,{status:401});if(!sameOrigin(request))return new Response(null,{status:403});try{
+ const v=input.parse(await request.json());await ensureWorkshopSchema();const digest=createHash('sha256').update(JSON.stringify(v)).digest('hex');const result=await db().begin(async sql=>{
+  await sql`SELECT pg_advisory_xact_lock(812623)`;await sql`SELECT pg_advisory_xact_lock(812624)`;
+  const [prior]=await sql`SELECT digest FROM workshop_commands WHERE tenant_id=${TENANT} AND id=${v.request_id}`;if(prior){if(prior.digest!==digest)throw new Invalid('Identificador reutilizado.',409);return {ok:true,replayed:true}}
+  const [o]=await sql`SELECT * FROM work_orders WHERE tenant_id=${TENANT} AND id=${v.order_id} FOR UPDATE`;if(!o||!orderVisible(user,o.data))throw new Invalid('Orden no disponible.',404);if(o.version!==v.version)throw new Invalid('La orden cambió. Actualiza antes de entregar.',409);
+  const d=structuredClone(o.data) as OrderFields,now=new Date().toISOString();
+  if(v.to==='front_desk'){if(d.stage!=='ready'||!d.tests_passed)throw new Invalid('Solo un equipo listo con pruebas aprobadas puede entregarse a recepción.');if(d.workflow){const [q]=await sql`SELECT status,plan_revision FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${o.id} ORDER BY revision DESC LIMIT 1`;if(!approvalCurrent(d.workflow,q)||!d.workflow.technical_closed||!d.workflow.cleaning_done||d.workflow.drying_required&&!d.workflow.drying_done||d.workflow.issues.some(i=>!i.confirmed||!i.resolved))throw new Invalid('Completa autorización, daños, pruebas y preentrega antes de entregar a recepción.');}if((await sql`SELECT id FROM work_order_parts WHERE tenant_id=${TENANT} AND order_id=${o.id} AND state='reserved'`).length)throw new Invalid('Instala o devuelve las piezas reservadas antes de entregar.');d.stage='front_desk';d.handoff={front_desk_at:now,front_desk_by:user.code,client_at:null,client_by:'',notes:v.notes,collection_reference:v.collection_reference,reference_amount:v.reference_amount};}
+  else{if(d.stage!=='front_desk'||!d.handoff)throw new Invalid('Registra primero la entrega del taller a recepción.');d.stage='delivered';d.handoff={...d.handoff,client_at:now,client_by:user.code,notes:d.handoff.notes+'\n'+v.notes,collection_reference:v.collection_reference||d.handoff.collection_reference,reference_amount:v.reference_amount??d.handoff.reference_amount};if(d.workflow)d.workflow.satisfaction=v.satisfaction;}
+  d.delivery_notes=d.handoff!.notes;await sql`UPDATE work_orders SET data=${sql.json(d)},version=version+1,updated_at=now() WHERE tenant_id=${TENANT} AND id=${o.id}`;
+  await sql`INSERT INTO work_order_events(tenant_id,order_id,action,detail,stage,paused) VALUES(${TENANT},${o.id},${'handoff_'+v.to},${sql.json({actor:user.code,to:v.to,notes:v.notes,...(d.workflow?{_schedule:d.workflow.schedule}:{})})},${d.stage},true)`;
+  await sql`INSERT INTO audit_events(tenant_id,actor,action,entity_id,detail) VALUES(${TENANT},${user.code},${'handoff_'+v.to},${o.id},${sql.json({from:o.data.stage,to:d.stage,at:now})})`;await sql`INSERT INTO workshop_commands(id,tenant_id,digest) VALUES(${v.request_id},${TENANT},${digest})`;return {ok:true,stage:d.stage};
+ });return Response.json(result);
+ }catch(e){return Response.json({error:e instanceof Invalid?e.message:e instanceof z.ZodError?'Completa la constancia de entrega.':'No se pudo registrar la entrega; no se aplicaron cambios parciales.'},{status:e instanceof Invalid?e.status:e instanceof z.ZodError?400:503})}}

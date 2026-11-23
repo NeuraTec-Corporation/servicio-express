@@ -112,3 +112,7 @@ La captura es manual y duplicada respecto al POS por mandato. No existe conector
 Selector ES/EN persistente en interfaz, TV y reporte. Los datos libres de cliente/técnico no se reescriben ni se traducen mediante IA. Jornada por orden configurable (inicial 15:00–20:00, America/New_York); los eventos guardan su horario para no recalcular el pasado con ajustes posteriores. El tiempo activo V2 excluye mañanas/noches fuera de jornada y pausas; curado mantiene duración de calendario. V1 conserva su semántica histórica, sin presentarla como fichaje.
 
 Los respaldos nuevos incluyen configuración V2 y validan referencias de daños/piezas/evidencias. Se exige coincidencia de migraciones para recuperar: los archivos anteriores a 007 necesitan un procedimiento de migración y no se aplican sobre este esquema automáticamente. No se realizó limpieza general ni recuperación destructiva.
+
+## Taller rápido y entrega a recepción
+
+La ficha permite fallas múltiples desde recepción, accesos rápidos arrastrables, PIN privado, evidencias iniciales y navegación directa a presupuesto/fotos/tiempos. Entrega de taller a recepción y de recepción al cliente se registran separadas; las tarjetas/TV solo muestran equipos que siguen en taller. Filtros analíticos sin solapamientos y actualización con confirmación visible. [Guía funcional y explicación de controles](GUIA-TALLER-RAPIDO.md).

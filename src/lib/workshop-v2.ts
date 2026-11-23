@@ -1,6 +1,6 @@
 import {z} from 'zod';
 const text=z.string().trim().max(4000),short=z.string().trim().max(160);
-export const issueSchema=z.object({id:z.uuid(),reported:short.min(1),preliminary:text.default(''),diagnosis:text.default(''),solution:text.default(''),requires_part:z.boolean().default(true),confirmed:z.boolean().default(false),resolved:z.boolean().default(false),final_diagnosis:text.default('')});
+export const issueSchema=z.object({id:z.uuid(),reported:short.min(1),preliminary:text.default(''),diagnosis:text.default(''),solution:text.default(''),requires_part:z.boolean().default(true),evidence_required:z.boolean().optional(),confirmed:z.boolean().default(false),resolved:z.boolean().default(false),final_diagnosis:text.default('')});
 export const partRequestSchema=z.object({id:z.uuid(),issue_id:z.uuid(),description:short.min(1),sku:short.default(''),quantity:z.number().int().min(1).max(10000),unit_cost:z.number().min(0).max(1e7).refine(n=>Math.abs(n*100-Math.round(n*100))<.00001),currency:z.string().regex(/^[A-Z]{3}$/),source:z.enum(['stock','supplier']),batch_id:z.uuid().nullable().default(null),supplier_id:z.uuid().nullable().default(null),status:z.enum(['planned','ordered','received','rejected','cancelled']).default('planned'),supplier_reference:short.default(''),condition:z.enum(['new','used','refurbished']).default('new')});
 export type Issue=z.infer<typeof issueSchema>;
 export type PartRequest=z.infer<typeof partRequestSchema>;

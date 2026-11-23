@@ -66,7 +66,7 @@ export async function POST(request:Request){
     const [order]=await sql`SELECT * FROM work_orders WHERE tenant_id=${TENANT} AND id=${input.order_id} FOR UPDATE`;
     if(!order||!orderVisible(user,order.data))throw new Invalid('Orden no disponible',404);
     if(order.version!==input.version)throw new Invalid('La orden cambió. Actualiza la ficha antes de continuar.',409);
-    if(order.data.stage==='delivered'&&input.action!=='settle')throw new Invalid('La orden está entregada. Reábrela explícitamente antes de modificar su operación.');
+    if(['front_desk','delivered'].includes(order.data.stage)&&input.action!=='settle')throw new Invalid('La orden está entregada. Reábrela explícitamente antes de modificar su operación.');
     const [latest]=await sql`SELECT * FROM work_order_quotes WHERE tenant_id=${TENANT} AND order_id=${order.id} ORDER BY revision DESC LIMIT 1`;
     const workflow=order.data.workflow;if(workflow&&['reserve','consume','settle'].includes(input.action)&&!approvalCurrent(workflow,latest))throw new Invalid('Falta aprobación del plan V2 actual.');if(workflow&&input.action==='decide'&&(!input.channel||!input.respondent||latest?.plan_revision!==workflow.revision))throw new Invalid('Registra canal y persona que responde a la versión actual.');if(workflow&&latest)latest.lines=resolvedLines(latest.lines,workflow.requests);
     let next={...order.data};
